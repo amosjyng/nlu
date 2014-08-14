@@ -1,0 +1,3 @@
+[submodule "scone"]
+	path = scone
+	url = git@github.com:sfahlman/scone.git
