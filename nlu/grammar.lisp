@@ -20,6 +20,7 @@
   (new-is-a {tangible} {entity})
   (new-is-a {legal entity} {entity})
   (new-type {I} {pronoun})
+  (new-type {me} {pronoun})
   (new-type {you} {pronoun})
   (new-type {he} {pronoun})
   (new-type {she} {pronoun})
@@ -175,10 +176,28 @@
 (defaction picking-up-x picking-x-up {pick_up.v.01} "picking" "up")
 (defaction screwing-in-x screwing-x-in {screw.v.03} "screwing" "in")
 
-(defconstruction to-entity
-  ((= "to" discard) (= {entity} entity))
-  
-  (new-indv {to entity (grammatical entity)}))
+(defmacro deft-action (v-r-o v-o-to-r action)
+  `(defconstructions ,(list v-r-o v-o-to-r)
+     (((= ,action action)
+       (= (:structured {entity}) recipient)
+       (= (:structured {entity}) theme))
+      
+      ((= ,action action)
+       (= (:structured {entity}) theme)
+       (= "to" discard)
+       (= (:structured {entity}) recipient)))
+
+     (let ((new-node (ensure-indv-exists ,action))
+	   (action-object
+	    (meaning-scone-element (first theme))))
+       (x-is-the-y-of-z action-object *action-object* new-node)
+       (when recipient
+	 (x-is-the-y-of-z
+	  (meaning-scone-element (first recipient))
+	  *action-recipient* new-node))
+       new-node)))
+
+(deft-action hand-me-x hand-x-to-me {pass.v.05})
 
 (defconstruction verb-phrase
     ((= (:unstructured {action}) action)
@@ -367,6 +386,12 @@
 (defparameter *sentence-position* 0
   "The position at which to start a new sentence")
 
+(defun lispify-pronoun (meaning)
+  "Replace a pronoun meaning with first/second person (or actual object)"
+  (let ((mse (meaning-scone-element meaning)))
+    (cond ((simple-is-x-a-y? mse {me})
+	   {first person}))))
+
 (defun lispify-before (matched-construction)
   "Turn a matched construction representing a {before} relation into a
    list"
@@ -383,9 +408,18 @@
 
 (defun lispify-action (matched-construction)
   "Turn a matched constructino representing an {action} into a list"
-  (list :action (parent-element (meaning-scone-element matched-construction))
-	(list :object
-	      (lispify (get-first-component 'theme matched-construction)))))
+  (let* ((object (get-first-component 'theme matched-construction))
+	 (recipient (get-first-component 'recipient matched-construction))
+	 (o-list (when object
+		   (list :object (lispify object))))
+	 (r-list (when recipient
+		   (list :recipient (lispify recipient)))))
+    (cons :action
+	  (cons (parent-element (meaning-scone-element matched-construction))
+		(cond ((and o-list r-list)
+		       (list o-list r-list))
+		      (o-list (list o-list))
+		      (r-list (list r-list)))))))
 
 (defun lispify-entity (matched-construction)
   "Turn a matched construction representing an {entity} into a list"
@@ -435,6 +469,9 @@
     (cond ((listp (meaning-scone-element goal-value))
 	   (mapcar #'lispify (meaning-scone-element goal-value)))
 	  ((simple-is-x-a-y? (meaning-scone-element goal-value)
+			     {pronoun})
+	   (lispify-pronoun goal-value))
+	  ((simple-is-x-a-y? (meaning-scone-element goal-value)
 			     {before})
 	   (lispify-before goal-value))
 	  ((simple-is-x-a-y? (meaning-scone-element goal-value)
@@ -454,7 +491,8 @@
 	   (lispify-why-query goal-value))
 	  ((simple-is-x-a-y? (meaning-scone-element goal-value)
 			     {sentence (grammatical entity)})
-	   (lispify-sentence goal-value)))))
+	   (lispify-sentence goal-value))
+	  (t goal-value))))
 
 (defun nlu (sentence)
   "Create a Lisp representation of a natural language sentence"
