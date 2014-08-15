@@ -7,7 +7,6 @@
 ;; allow this file to be loaded multiple times
 (when (zerop (hash-table-count *strings-to-concepts-hashmap*))
   (new-type {grammatical entity} {thing})
-  (new-type {entity} {thing})
   (new-eq {entity} {entity.n.01})
   (new-type {specific entity} {entity})
   (new-type {pronoun} {entity})
@@ -25,6 +24,8 @@
   (new-type {he} {pronoun})
   (new-type {she} {pronoun})
   (new-type {we} {pronoun})
+  (new-indv {first person} {first_person.n.01})
+  (new-indv {second person} {second_person.n.01})
   
   (new-type {indefinite article (grammatical entity)}
 	    {article (grammatical entity)})
@@ -55,7 +56,10 @@
   (english {bolt.n.06} :noun "bolts")
   (english {hammer.v.01} :verb "hammered")
 
-  (new-relation {command} :a-type-of {thing} :b-inst-of {action})
+  (new-relation {command}
+		:a-inst-of {entity}
+		:b-inst-of {entity}
+		:c-inst-of {action})
   (new-is-a {command} {clause (grammatical entity)})
   
   (new-type {query} {thing})
@@ -69,6 +73,9 @@
 ;;;                    ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+;;; user is first person, computer is second person
+(new-eq {cccc} {second person})
+(new-eq {uuuu} {first person})
 (defparameter *computer* {cccc})
 (defparameter *user* {uuuu})
 
@@ -235,15 +242,16 @@
 
 (defconstruction command
  ((? "please" discard) (= (:structured {action}) action))
- (new-statement *user* {command}
-		(meaning-scone-element (first action))))
+
+ (new-statement {first person} {command} {second person}
+		:c (meaning-scone-element (first action))))
 (setf (construction-score-multiplier command) 1.1)
 
 (defconstruction ordered-command
   ((? "please" discard) (= (:structured {before}) ordered-action))
   
-  (new-statement *user* {command}
-		 (meaning-scone-element (first ordered-action))))
+  (new-statement {first person} {command} {second person}
+		 :c (meaning-scone-element (first ordered-action))))
 (setf (construction-score-multiplier ordered-command) 1.3)
 
 (defmacro defordered-action (construction-name pattern)
@@ -445,5 +453,4 @@
   (let* ((word-list (split-sequence:split-sequence #\Space sentence))
 	 (parse-result (semiring-parse word-list *sentence-position*)))
     (incf *sentence-position* (length word-list))
-    (in-context *last-parse-context*)
     (lispify parse-result)))

@@ -975,7 +975,7 @@
 			 (get-last-match-component new-match))
 			:scone-element (run-payload new-match))))
     (setf (matched-construction-context matched-construction) *context*)
-    (in-context {general})
+    (in-context *last-parse-context*)
     matched-construction))
 
 (defun start-match-against-construction (construction)
@@ -1367,6 +1367,7 @@
 	    (setf *last-parse-context* (matched-construction-context goal-value))
 	    (setf *question* nil)
 	    (setf *answer* nil)))))
+    (in-context *last-parse-context*)
     goal-value))
 
 (defun get-goal-value ()
