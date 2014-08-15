@@ -41,6 +41,9 @@
 	    {definite article (grammatical entity)}
 	    :english "the")
 
+  (new-type {to entity (grammatical entity)}
+	    {grammatical entity})
+
   (new-indv {generic entity} {thing})
   
   (new-is-a {large.a.01} {entity modifier})
@@ -80,6 +83,17 @@
 (defparameter *user* {uuuu})
 
 (defparameter *constructions* nil)
+
+(defmacro defconstructions (names patterns &rest payload)
+  "Define multiple constructions with the same payload but different
+   names and patterns"
+  `(progn
+     ,@(mapcar
+	(lambda (name pattern)
+	  `(defconstruction ,name
+	     ,pattern
+	     ,@payload))
+	names patterns)))
 
 (defconstruction noun-phrase
     ((? {article (grammatical entity)} article)
@@ -132,43 +146,39 @@
 
 (defmacro defaction (action-name action-in-between-name
 		     action-scone-element word1 word2)
-  `(progn
-     (defconstruction ,action-name
-       ((= ,word1 discard)
-	(= ,word2 discard)
-	(? (:structured {entity}) theme))
-       
-       (let ((new-node (ensure-indv-exists ,action-scone-element))
-	     (action-object
-	      (when (not (null theme))
-		(meaning-scone-element (first theme)))))
-	 (when (not (null action-object))
-	   (x-is-the-y-of-z action-object *action-object* new-node))
-	 new-node))
-     (defconstruction ,action-in-between-name
-       ((= ,word1 discard)
-	(? (:structured {entity}) theme)
-	(= ,word2 discard))
-       
-       (let ((new-node (ensure-indv-exists ,action-scone-element))
-	     (action-object
-	      (when (not (null theme))
-		(meaning-scone-element (first theme)))))
-	 (when (not (null action-object))
-	   (x-is-the-y-of-z action-object *action-object* new-node))
-	 new-node))))
+  `(defconstructions ,(list action-name action-in-between-name)
+     (((= ,word1 discard)
+       (= ,word2 discard)
+       (? (:structured {entity}) theme))
+      
+      ((= ,word1 discard)
+       (= (:structured {entity}) theme)
+       (= ,word2 discard)))
+     
+     (let ((new-node (ensure-indv-exists ,action-scone-element))
+	   (action-object
+	    (when (not (null theme))
+	      (meaning-scone-element (first theme)))))
+       (when (not (null action-object))
+	 (x-is-the-y-of-z action-object *action-object* new-node))
+       new-node)))
 
-(defaction hammered-in-x hammered-x-in {hammer.v.01} "hammer" "in")
-(defaction hammered-down-x hammered-x-down {hammer.v.01} "hammer" "down")
-(defaction nailed-down-x nailed-x-down {nail.v.01} "nail" "down")
+(defaction hammer-in-x hammer-x-in {hammer.v.01} "hammer" "in")
+(defaction hammer-down-x hammer-x-down {hammer.v.01} "hammer" "down")
+(defaction nail-down-x nail-x-down {nail.v.01} "nail" "down")
 (defaction pick-up-x pick-x-up {pick_up.v.01} "pick" "up")
 (defaction screw-in-x screw-x-in {screw.v.03} "screw" "in")
 ;;; now for the gerunds
-(defaction hammered-in-x hammered-x-in {hammer.v.01} "hammering" "in")
-(defaction hammered-down-x hammered-x-down {hammer.v.01} "hammering" "down")
-(defaction nailed-down-x nailed-x-down {nail.v.01} "nailing" "down")
-(defaction pick-up-x pick-x-up {pick_up.v.01} "picking" "up")
-(defaction screw-in-x screw-x-in {screw.v.03} "screwing" "in")
+(defaction hammering-in-x hammering-x-in {hammer.v.01} "hammering" "in")
+(defaction hammering-down-x hammering-x-down {hammer.v.01} "hammering" "down")
+(defaction nailing-down-x nailing-x-down {nail.v.01} "nailing" "down")
+(defaction picking-up-x picking-x-up {pick_up.v.01} "picking" "up")
+(defaction screwing-in-x screwing-x-in {screw.v.03} "screwing" "in")
+
+(defconstruction to-entity
+  ((= "to" discard) (= {entity} entity))
+  
+  (new-indv {to entity (grammatical entity)}))
 
 (defconstruction verb-phrase
     ((= (:unstructured {action}) action)
