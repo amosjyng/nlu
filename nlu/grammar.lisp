@@ -178,11 +178,11 @@
 
 (defmacro deft-action (v-r-o v-o-to-r action)
   `(defconstructions ,(list v-r-o v-o-to-r)
-     (((= ,action action)
+     (((= (:unstructured ,action) action)
        (= (:structured {entity}) recipient)
        (= (:structured {entity}) theme))
       
-      ((= ,action action)
+      ((= (:unstructured ,action) action)
        (= (:structured {entity}) theme)
        (= "to" discard)
        (= (:structured {entity}) recipient)))
