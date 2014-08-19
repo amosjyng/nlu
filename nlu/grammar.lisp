@@ -96,46 +96,50 @@
 	     ,@payload))
 	names patterns)))
 
+(defun find-element-with (article modifiers entity)
+  "Given an article, modifiers, and a Scone element representing an
+   entity, find the one Scone individual (if any) that matches all
+   modifiers and is of type ENTITY"
+  (when 
+      (and (not (null article))
+	   (simple-is-x-a-y? (meaning-scone-element (first article))
+			     {definite article (grammatical entity)}))
+    (with-markers (m um)
+		  (progn
+		    (mark-instances (meaning-scone-element (first entity))
+				    m)
+		    (mapcar (lambda (modifier)
+			      (do-marked (instance m)
+					 (unless (simple-is-x-a-y? instance
+								   (meaning-scone-element modifier))
+					   (mark instance um))))
+			    modifiers)
+		    (do-marked (instance um)
+			       (unmark instance m))
+		    (let ((instances (list-marked m)))
+		      (when (eq (length instances) 1)
+			(first instances)))))))
+
 (defconstruction noun-phrase
     ((? {article (grammatical entity)} article)
      (* {entity modifier} modifiers)
      (= {entity} entity))
 
-    (let ((new-node
-	   (ensure-indv-exists
-	    (meaning-scone-element
-	     (first entity)))))
+    (let* ((existing-node (find-element-with article modifiers entity))
+	   (new-node
+	    (or existing-node
+		(ensure-indv-exists
+		 (meaning-scone-element (first entity))))))
       (progn
-	(mapcar (lambda (modifier)
-		  (new-is-a new-node (meaning-scone-element modifier)))
-		modifiers)
-	(when
-	    (and (not (null article))
-		 (simple-is-x-a-y? (meaning-scone-element (first article))
-				   {indefinite article (grammatical entity)}))
-	  (new-is-a new-node {generic entity}))
-	(when 
-	    (and (not (null article))
-		 (simple-is-x-a-y? (meaning-scone-element (first article))
-				   {definite article (grammatical entity)}))
-	  (with-markers (m um)
-			(progn
-			  (mark-instances (meaning-scone-element (first entity))
-					  m)
-			  (mapcar (lambda (modifier)
-				    (do-marked (instance m)
-					       (unless (simple-is-x-a-y? instance
-									 (meaning-scone-element modifier))
-						 (mark instance um))))
-				  modifiers)
-			  (do-marked (instance um)
-				     (unmark instance m))
-			  (let ((instances (list-marked m)))
-			    (when (eq (length instances) 2)
-			      (mapcar (lambda (instance)
-					(unless (eq instance new-node)
-					  (new-eq instance new-node)))
-				      instances))))))
+	(unless existing-node
+	  (mapcar (lambda (modifier)
+		    (new-is-a new-node (meaning-scone-element modifier)))
+		  modifiers)
+	  (when
+	      (and (not (null article))
+		   (simple-is-x-a-y? (meaning-scone-element (first article))
+				     {indefinite article (grammatical entity)}))
+	    (new-is-a new-node {generic entity})))
 	new-node)))
 
 (defconstruction entities
