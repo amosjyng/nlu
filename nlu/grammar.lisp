@@ -27,6 +27,9 @@
   (new-type {we} {pronoun})
   (new-indv {first person} {first_person.n.01})
   (new-indv {second person} {second_person.n.01})
+
+  (new-type {table leg} {tangible} :english "leg")
+  (x-is-a-y-of-z {table leg} {part} {table.n.02})
   
   (new-type {indefinite article (grammatical entity)}
 	    {article (grammatical entity)})
@@ -70,6 +73,12 @@
   (new-type {is-a query} {query})
   (new-type {why query} {query})
   (new-type {how query} {query}))
+
+;;; utility functions
+
+(defun mse-f (meanings)
+  "Get the first meaning's scone element out of a list of meanings"
+  (meaning-scone-element (first meanings)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;                    ;;;
@@ -141,6 +150,19 @@
 				     {indefinite article (grammatical entity)}))
 	    (new-is-a new-node {generic entity})))
 	new-node)))
+
+(defun is-x-a-y-of-z? (x y z)
+  "See if element X is a role Y of element Z"
+  (member (lookup-element x) (list-all-x-of-y y z)))
+
+(defconstruction subentity
+  ((= (:unstructured {entity}) bigger-entity)
+   (= (:unstructured {entity}) entity))
+  
+  (unless (is-x-a-y-of-z? (mse-f entity) {part} (mse-f bigger-entity))
+    (error "Subentity not part of entity"))
+  
+  (mse-f entity))
 
 (defconstruction entities
   ((= (:structured {entity}) items)
