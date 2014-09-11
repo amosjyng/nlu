@@ -3,7 +3,7 @@ Natural Language Understander
 
 This is a natural language parser for the Scone project. To get it running,
 
-1. Install [Quicklisp]()
+1. Install [Quicklisp](http://beta.quicklisp.org/quicklisp.lisp)
 2. In the terminal, run `sbcl --load initialize.lisp`
 3. Once SBCL has finished loading, run `(nlu "Please pick up a large screwdriver and screw in the bolts.")`
 
