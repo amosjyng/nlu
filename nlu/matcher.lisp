@@ -137,7 +137,7 @@
     :type structure-object ; Scone element
     :initarg :scone-element
     :initform (error
-	       "You MUST provide the Scone element for this meaning")
+               "You MUST provide the Scone element for this meaning")
     :accessor meaning-scone-element)
    (score
     :documentation
@@ -336,12 +336,12 @@
    This is a pre-processing step before the actual parsing, so effiency here
    shouldn't be quite as much of a concern."
   (setf (slot-value new-construction 'elements) ; Replace original pattern
-	(apply #'nconc ; with expanded pattern
-	       (loop for element in (get-construction-pattern new-construction)
-		  if  (equal '+ (operator element)) ;if x+
-		  collect (list (change-operator '= element) ; change to xx*
-				(change-operator '* element))
-		  else collect (list element)))))
+        (apply #'nconc ; with expanded pattern
+               (loop for element in (get-construction-pattern new-construction)
+                  if  (equal '+ (operator element)) ;if x+
+                  collect (list (change-operator '= element) ; change to xx*
+                                (change-operator '* element))
+                  else collect (list element)))))
 
 (defun get-length (range)
   "Get the length spanned by a RANGE"
@@ -375,7 +375,7 @@
 
    This is an :around method so that it runs for all derived classes"
   (if (and (equal (start-of data1) (start-of data2))
-	   (equal (end-of data1) (end-of data2)))
+           (equal (end-of data1) (end-of data2)))
       (call-next-method)))
 
 (defmethod data-equalp ((data1 meaning) (data2 meaning))
@@ -385,7 +385,7 @@
 (defmethod data-equalp ((data1 match) (data2 match))
   "See if two matches are equal"
   (and (eq (get-match-construction data1)
-	   (get-match-construction data2))
+           (get-match-construction data2))
        (equal (match-progress data1) (match-progress data2))
        (equal (match-score data1) (match-score data2))
        (data-equalp (match-so-far data1) (match-so-far data2))))
@@ -397,9 +397,9 @@
    as well."
   (if (listp (cdr data1))
       (loop for x in data1 for y in data2 ; check all elements the same
-	 always (data-equalp x y))
+         always (data-equalp x y))
       (and (data-equalp (car data1) (car data2)) ; check two elements the same
-	   (data-equalp (cdr data1) (cdr data2)))))
+           (data-equalp (cdr data1) (cdr data2)))))
 
 (defun hash-keys (hash-table)
   "Get hash-keys from a hash-table
@@ -413,18 +413,18 @@
    TODO: replace with call to Alexandria library hash-table comparison function"
   (and (equalp (hash-keys data1) (hash-keys data2))
        (data-equalp (alexandria:hash-table-keys data1)
-		    (alexandria:hash-table-keys data2))
+                    (alexandria:hash-table-keys data2))
        (loop for key being the hash-keys in data1
-	  always (data-equalp (gethash key data1) (gethash key data2)))))
+          always (data-equalp (gethash key data1) (gethash key data2)))))
 
 (defmethod data-equalp ((data1 matched-construction)
-			(data2 matched-construction))
+                        (data2 matched-construction))
   "See if two matched-constructions are equal"
   (and (eq (get-construction data1) (get-construction data2))
        ;; don't care about actual Scone node because two newly created INDV's
        ;; are never gonna be the same
        (data-equalp (get-matched-construction-components data1)
-		    (get-matched-construction-components data2))))
+                    (get-matched-construction-components data2))))
 
 (defmethod data-equalp ((data1 t) (data2 t))
   "If DATA-EQUALP is not define for types of DATA1 and DATA2, simply use normal
@@ -461,20 +461,20 @@
   (make-instance 'range :start start-pos :end (+ start-pos length)))
 
 (defun define-meaning (scone-element start end
-				     plural
-				     ends-in-comma
-				     ends-in-period
-				     ends-in-question-mark
-				     &optional (score 1))
+                                     plural
+                                     ends-in-comma
+                                     ends-in-period
+                                     ends-in-question-mark
+                                     &optional (score 1))
   "Utility function for creating a MEANING object from a SCONE-ELEMENT spanning
    a certain RANGE in a sentence"
   (make-instance 'meaning :scone-element scone-element
-		 :start start :end end
-		 :plural plural
-		 :ends-in-comma ends-in-comma
-		 :ends-in-period ends-in-period
-		 :ends-in-question-mark ends-in-question-mark
-		 :score score))
+                 :start start :end end
+                 :plural plural
+                 :ends-in-comma ends-in-comma
+                 :ends-in-period ends-in-period
+                 :ends-in-question-mark ends-in-question-mark
+                 :score score))
 
 (defmacro defconstruction (construction-name elements &rest payload)
   "Utility macro for defining new constructions and adding them to the global
@@ -482,8 +482,8 @@
   `(progn
      (defparameter ,construction-name
        (make-instance 'construction
-		      :elements ',elements
-		      :payload '(progn ,@payload)))
+                      :elements ',elements
+                      :payload '(progn ,@payload)))
      (setf *constructions* (cons ,construction-name *constructions*))
      ,construction-name))
 
@@ -492,11 +492,11 @@
    names and patterns"
   `(progn
      ,@(mapcar
-	(lambda (name pattern)
-	  `(defconstruction ,name
-	     ,pattern
-	     ,@payload))
-	names patterns)))
+        (lambda (name pattern)
+          `(defconstruction ,name
+             ,pattern
+             ,@payload))
+        names patterns)))
 
 (defun increment-range (range &optional (length 1))
   "Destructively increment the length of the range (by a default of 1)"
@@ -511,9 +511,9 @@
   "Subsume second range into first one (first one gets destructively modified).
    Returns first range after it's been destructively modified."
   (setf (start-of range1)
-	(min (or (start-of range1) 99999999) (or (start-of range2) 99999999)))
+        (min (or (start-of range1) 99999999) (or (start-of range2) 99999999)))
   (setf (end-of range1)
-	(max (or (end-of range1) -1) (or (end-of range2) -1)))
+        (max (or (end-of range1) -1) (or (end-of range2) -1)))
   range1)
 
 (defgeneric increment-match-range (match matched-token)
@@ -552,24 +552,24 @@
 (defun build-parse-tree (thing)
   "Build a parse tree from a matched-construction/string"
   (cond ((matched-constructionp thing)
-	 ;; if it's a matched-construction, build a parse tree by making each 
-	 ;; of the keys in the bindings a child subtree of this entire parse 
-	 ;; tree
-	 (cons
-	  (meaning-scone-element thing)
-	  (loop for key being the hash-keys in
-		(get-matched-construction-components thing)
-		using (hash-value value)
-		collect (cons key (build-parse-tree value)))))
-	((matchp thing)
-	 (loop for key being the hash-keys in
-	      (match-so-far thing)
-	    using (hash-value value)
-	    collect (cons key (build-parse-tree value))))
-	;; otherwise if it's a list, return a list of parse trees for each item
-	((listp thing) (loop for item in thing collect (build-parse-tree item)))
-	;; finally if anything else, just returned the matched token itself
-	(t thing)))
+         ;; if it's a matched-construction, build a parse tree by making each 
+         ;; of the keys in the bindings a child subtree of this entire parse 
+         ;; tree
+         (cons
+          (meaning-scone-element thing)
+          (loop for key being the hash-keys in
+                (get-matched-construction-components thing)
+                using (hash-value value)
+                collect (cons key (build-parse-tree value)))))
+        ((matchp thing)
+         (loop for key being the hash-keys in
+              (match-so-far thing)
+            using (hash-value value)
+            collect (cons key (build-parse-tree value))))
+        ;; otherwise if it's a list, return a list of parse trees for each item
+        ((listp thing) (loop for item in thing collect (build-parse-tree item)))
+        ;; finally if anything else, just returned the matched token itself
+        (t thing)))
 
 (defun get-range-string (range)
   "Return a string showing the range"
@@ -585,17 +585,17 @@
 (defmethod print-object ((object match) stream)
   "Show the current progress of a MATCH when printing it to a stream"
   (format stream "|~S ~a ~%            ~S SCORE=~,2f|"
-	  (insert-at #\. (get-match-pattern object)
-		     (1+ (match-progress object)))
-	  (get-range-string object)
-	  (build-parse-tree object)
-	  (match-score object)))
+          (insert-at #\. (get-match-pattern object)
+                     (1+ (match-progress object)))
+          (get-range-string object)
+          (build-parse-tree object)
+          (match-score object)))
 
 (defmethod print-object ((object matched-construction) stream)
   "Show the parse tree of a MATCHED-CONSTRUCTION when printing it to a stream"
   (format stream "<~S ~a SCORE=~,2f>"
-	  (build-parse-tree object) (get-range-string object) 
-	  (get-meaning-score object)))
+          (build-parse-tree object) (get-range-string object) 
+          (get-meaning-score object)))
 
 (defmethod print-object ((object range) stream)
   "Show the start and end positions of a RANGE when printing it to a stream"
@@ -604,8 +604,8 @@
 (defmethod print-object ((object meaning) stream)
   "Shows which Scone node a MEANING is attached to when printing to a stream"
   (format stream "<~S ~a SCORE=~,2f>"
-	  (meaning-scone-element object) (get-range-string object)
-	  (get-meaning-score object)))
+          (meaning-scone-element object) (get-range-string object)
+          (get-meaning-score object)))
 
 (defun copy-range (range)
   "Create a copy of a RANGE object."
@@ -624,7 +624,7 @@
    all lists."
   (let ((new-table (make-hash-table)))
     (loop for key being the hash-keys in old-table using (hash-value value)
-       do (setf (gethash key new-table)	(copy-list (gethash key old-table))))
+       do (setf (gethash key new-table) (copy-list (gethash key old-table))))
     new-table))
 
 (defun copy-match (match)
@@ -632,12 +632,12 @@
    and pattern, no pointers are reused, so this copy can be safely modified 
    without affecting the original."
   (make-instance 'match
-		 :construction (get-match-construction match)
-		 :match-so-far (copy-hash-table (match-so-far match))
-		 :match-progress (match-progress match) ; ints don't change
-		 :start (start-of match)
-		 :end (end-of match)
-		 :score (match-score match)))
+                 :construction (get-match-construction match)
+                 :match-so-far (copy-hash-table (match-so-far match))
+                 :match-progress (match-progress match) ; ints don't change
+                 :start (start-of match)
+                 :end (end-of match)
+                 :score (match-score match)))
 
 (defun overlaps? (range1 range2)
   "Checks whether two ranges overlap"
@@ -677,11 +677,11 @@
   "See if a match object can be turned into a MATCHED-CONSTRUCTION"
   (or (and (is-completed? match) match) ; return completed match
       (let ((next-expected-token (get-next-expected-token match))
-	    (match-copy (copy-match match)))
-	(and (can-be-skipped? next-expected-token)
-	     (progn
-	       (skip-element match-copy next-expected-token)
-	       (can-be-completed? match-copy))))))
+            (match-copy (copy-match match)))
+        (and (can-be-skipped? next-expected-token)
+             (progn
+               (skip-element match-copy next-expected-token)
+               (can-be-completed? match-copy))))))
 
 (defun construct-let-value (key value)
   "Returns an expression that creates the bindings for one variable in a LET
@@ -701,27 +701,27 @@
    The payload function should return a primary node representing the
    information in this new match."
   (let ((construction (get-match-construction new-match))
-	(components (match-so-far new-match)))
+        (components (match-so-far new-match)))
     ;; execute payload only when payload function is specified
     (when (slot-boundp construction 'payload)
       ;; bind variables in matched-construction components to their values, and
       ;; then evaluate payload code
       (progn
-	(setf *context* (new-context nil *context*))
-	(loop for value being the hash-values in components
-	   do
-	     (when (matched-constructionp value)
-	       (new-is-a *context*
-			 (matched-construction-context value))))
-	(in-context *context*) ; refresh markers
-	;; let the calling function restore the previous context
-	(eval
-	 `(let ,(loop for key being the hash-keys in components
-		   using (hash-value value)
-		   collect (construct-let-value key value))
-	    ,@(loop for key being the hash-keys in components
-		 collect `(declare (ignorable ,key)))
-	    ,(get-construction-payload construction)))))))
+        (setf *context* (new-context nil *context*))
+        (loop for value being the hash-values in components
+           do
+             (when (matched-constructionp value)
+               (new-is-a *context*
+                         (matched-construction-context value))))
+        (in-context *context*) ; refresh markers
+        ;; let the calling function restore the previous context
+        (eval
+         `(let ,(loop for key being the hash-keys in components
+                   using (hash-value value)
+                   collect (construct-let-value key value))
+            ,@(loop for key being the hash-keys in components
+                 collect `(declare (ignorable ,key)))
+            ,(get-construction-payload construction)))))))
 
 (defun increment-pattern-count (construction)
   "If a construction has been successfully matched, increment its count"
@@ -737,15 +737,15 @@
   ;;
   ;; todo: test that this doesn't remove existing information when ENTRY is null
   (cond (entry (setf (gethash key hash-table)
-		     (cons entry (gethash key hash-table))))
-	((null (gethash key hash-table))
-	 (setf (gethash key hash-table) nil))))
+                     (cons entry (gethash key hash-table))))
+        ((null (gethash key hash-table))
+         (setf (gethash key hash-table) nil))))
 
 (defun add-to-match-so-far (returned-match match-so-far)
   "If necessary, destructively add the next successful match to the hash table
    of bindings and matches. Return value is meaningless -- do not store it."
   (lossless-add-to-hash-table (car returned-match) (cdr returned-match)
-			      match-so-far))
+                              match-so-far))
 
 (defun get-components (component-name construction)
   "Get the values for that component in a construction"
@@ -765,7 +765,7 @@
 (defun get-mses (component-name construction)
   "Extract Scone elements from a component of a construction"
   (mapcar #'meaning-scone-element
-	  (get-components component-name construction)))
+          (get-components component-name construction)))
 
 (defun simple-get-meaning (component-name constructions-list)
   "Get the first meaning associated with a component from the first
@@ -773,16 +773,16 @@
    list only consists of one element)"
   (let ((first-thing (first constructions-list)))
     (if (typep first-thing 'matched-construction)
-	(get-mse component-name first-thing)
+        (get-mse component-name first-thing)
       (meaning-scone-element first-thing))))
 
 (defun get-last-match-component (match)
   "Get the component of a match that is last in a sentence"
   (loop named outer
-	for comp-list being the hash-values of (match-so-far match)
-	do (loop for comp in comp-list
-		 when (eq (end-of match) (end-of comp))
-		 do (return-from outer comp))))
+        for comp-list being the hash-values of (match-so-far match)
+        do (loop for comp in comp-list
+                 when (eq (end-of match) (end-of comp))
+                 do (return-from outer comp))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -802,38 +802,38 @@
   (equalp (meaning-scone-element actual-token) expected-token))
 
 (defmethod matches? ((actual-token structure-object)
-		     (expected-token structure-object))
+                     (expected-token structure-object))
   "See if ACTUAL-TOKEN IS-A EXPECTED-TOKEN"
   (simple-is-x-a-y? actual-token expected-token))
 
 (defmethod matches? ((actual-token matched-construction)
-		     (expected-token structure-object))
+                     (expected-token structure-object))
   "See if the Scone node associated with ACTUAL-TOKEN IS-A EXPECTED-TOKEN"
   (let ((original-context *context*)
-	(meaning (meaning-scone-element actual-token)))
+        (meaning (meaning-scone-element actual-token)))
     (in-context (matched-construction-context actual-token))
     (let ((result (matches? meaning expected-token)))
       (in-context original-context)
       result)))
 
 (defmethod matches? ((actual-token matched-construction)
-		     (expected-token symbol))
+                     (expected-token symbol))
   "See if the MATCHED-CONSTRUCTION satisfies some particular condition"
   (cond ((eq expected-token :atom)
-	 ;; meaning should never be NIL
-	 (atom (meaning-scone-element actual-token)))
-	((eq expected-token :list)
-	 (listp (meaning-scone-element actual-token)))
-	((eq expected-token :plural)
-	 (pluralp actual-token))
-	((eq expected-token :ends-in-comma)
-	 (ends-in-commap actual-token))
-	((eq expected-token :ends-in-period)
-	 (ends-in-periodp actual-token))
-	((eq expected-token :ends-in-question-mark)
-	 (ends-in-question-markp actual-token))
-	((eq expected-token :structured)
-	 t)))
+         ;; meaning should never be NIL
+         (atom (meaning-scone-element actual-token)))
+        ((eq expected-token :list)
+         (listp (meaning-scone-element actual-token)))
+        ((eq expected-token :plural)
+         (pluralp actual-token))
+        ((eq expected-token :ends-in-comma)
+         (ends-in-commap actual-token))
+        ((eq expected-token :ends-in-period)
+         (ends-in-periodp actual-token))
+        ((eq expected-token :ends-in-question-mark)
+         (ends-in-question-markp actual-token))
+        ((eq expected-token :structured)
+         t)))
 
 (defmethod matches? ((actual-token meaning) (expected-token structure-object))
   "See if the Scone node associated with ACTUAL-TOKEN IS-A EXPECTED-TOKEN"
@@ -843,15 +843,15 @@
   "See if the meaning object matches some condition specified by
    EXPECTED-TOKEN"
   (cond ((eq expected-token :plural)
-	 (pluralp actual-token))
-	((eq expected-token :ends-in-comma)
-	 (ends-in-commap actual-token))
-	((eq expected-token :ends-in-period)
-	 (ends-in-periodp actual-token))
-	((eq expected-token :ends-in-question-mark)
-	 (ends-in-question-markp actual-token))
-	((eq expected-token :unstructured)
-	 t)))
+         (pluralp actual-token))
+        ((eq expected-token :ends-in-comma)
+         (ends-in-commap actual-token))
+        ((eq expected-token :ends-in-period)
+         (ends-in-periodp actual-token))
+        ((eq expected-token :ends-in-question-mark)
+         (ends-in-question-markp actual-token))
+        ((eq expected-token :unstructured)
+         t)))
 
 (defmethod matches? ((actual-token t) (expected-token symbol))
   "See if ACTUAL-TOKEN matches some condition specified by
@@ -861,12 +861,12 @@
 (defmethod matches? ((actual-token list) (expected-token symbol))
   "See whether everything in ACTUAL-TOKEN satisfies a certain attribute"
   (loop for token in actual-token
-	always (matches? actual-token expected-token)))
+        always (matches? actual-token expected-token)))
 
 (defmethod matches? ((actual-token list) (expected-token structure-object))
   "See whether everything in ACTUAL-TOKEN matches EXPECTED-TOKEN"
   (when (loop for token in actual-token
-	      always (matches? token expected-token))
+              always (matches? token expected-token))
     t))
 
 (defmethod matches? ((actual-token t) (expected-token list))
@@ -875,17 +875,17 @@
    This function returns a dotted pair (BINDING-VARIABLE . ACTUAL-TOKEN) if
    matched."
   (cond ((and (not (null expected-token))
-	      (listp (second expected-token))
-	      (loop for token in (second expected-token)
-		    always (matches? actual-token token)))
-	 (cons (third expected-token) actual-token))
-	((and (not (null expected-token))
-	      (not (listp (second expected-token)))
-	      (matches? actual-token (second expected-token)))
-	 (cons (third expected-token) actual-token))
-	((and (not (null expected-token))
-	      (null (second expected-token)))
-	 (cons (third expected-token) actual-token))))
+              (listp (second expected-token))
+              (loop for token in (second expected-token)
+                    always (matches? actual-token token)))
+         (cons (third expected-token) actual-token))
+        ((and (not (null expected-token))
+              (not (listp (second expected-token)))
+              (matches? actual-token (second expected-token)))
+         (cons (third expected-token) actual-token))
+        ((and (not (null expected-token))
+              (null (second expected-token)))
+         (cons (third expected-token) actual-token))))
 
 (defmethod matches? ((actual-token t) (expected-token t))
   "If unknown data-type, simply see if the two tokens are DATA-EQUALP."
@@ -900,7 +900,7 @@
   (setf (match-score match) (round-decimal new-score 1000)))
 
 (defun handle-matched-token (match next-expected-token match-result
-				   matched-token)
+                                   matched-token)
   "When a NEXT-TOKEN is successfully matched, call this function so that:
     - match range will be incremented
     - match progress will be increased if appropriate
@@ -925,7 +925,7 @@
     ;; take matched token score into account when updating new score
     (unless (stringp matched-token) ; no score for strings
       (update-match-score new-match
-			  (* (get-score matched-token) (match-score new-match))))
+                          (* (get-score matched-token) (match-score new-match))))
     new-match)) ; return modified match
 
 (defun skip-element (match next-expected-token)
@@ -936,12 +936,12 @@
   ;; first, make sure element exists in bindings, because we want to bind NIL
   ;; to this variable when it comes time to run the payload code
   (when (and (listp next-expected-token)
-	     (not (null (third next-expected-token))))
+             (not (null (third next-expected-token))))
     (unless (gethash (third next-expected-token) (match-so-far match))
       ;; penalize for skipping something that's never been matched
       (update-match-score match (* (match-score match) (- 1 *pattern-skip-penalty*))))
     (add-to-match-so-far (cons (third next-expected-token) nil)
-			 (match-so-far match)))
+                         (match-so-far match)))
   (increment-match-progress match)) ; skip this token
 
 (defun can-be-skipped? (next-expected-token)
@@ -976,11 +976,11 @@
    NEXT-TOKEN to something after skipping the optional expected token. If so,
    then the above steps apply. If not, then nothing is done."
   (let* ((next-expected-token (get-next-expected-token match))
-	 (match-result (matches? next-token next-expected-token)))
+         (match-result (matches? next-token next-expected-token)))
     (if match-result
-	(handle-matched-token match next-expected-token match-result
-			      next-token)
-	(handle-unmatched-token match next-token next-expected-token))))
+        (handle-matched-token match next-expected-token match-result
+                              next-token)
+        (handle-unmatched-token match next-token next-expected-token))))
 
 (defun make-matched-construction (new-match)
   "Returns a matched-construction from the completed match, and handles other
@@ -990,25 +990,25 @@
   (increment-pattern-count (get-match-construction new-match)) 
   ;; create a new matched-construction from this match
   (let ((matched-construction
-	 (make-instance 'matched-construction 
-			;; same matched-construction rule
-			:rule (get-match-construction new-match) 
-			:start (start-of new-match)
-			:end (end-of new-match)
-			:components (match-so-far new-match)
-			:score (* (match-score new-match)
-				  (construction-score-multiplier
-				   (get-match-construction new-match)))
-			:ends-in-comma
-			(ends-in-commap
-			 (get-last-match-component new-match))
-			:ends-in-period
-			(ends-in-periodp
-			 (get-last-match-component new-match))
-			:ends-in-question-mark
-			(ends-in-question-markp
-			 (get-last-match-component new-match))
-			:scone-element (run-payload new-match))))
+         (make-instance 'matched-construction 
+                        ;; same matched-construction rule
+                        :rule (get-match-construction new-match) 
+                        :start (start-of new-match)
+                        :end (end-of new-match)
+                        :components (match-so-far new-match)
+                        :score (* (match-score new-match)
+                                  (construction-score-multiplier
+                                   (get-match-construction new-match)))
+                        :ends-in-comma
+                        (ends-in-commap
+                         (get-last-match-component new-match))
+                        :ends-in-period
+                        (ends-in-periodp
+                         (get-last-match-component new-match))
+                        :ends-in-question-mark
+                        (ends-in-question-markp
+                         (get-last-match-component new-match))
+                        :scone-element (run-payload new-match))))
     (setf (matched-construction-context matched-construction) *context*)
     (in-context *last-parse-context*)
     matched-construction))
@@ -1026,7 +1026,7 @@
   "Continue a list of unfinished matches with the next token, returning only
    successful matches."
   (remove-if #'null
-	     (loop for match in matches	collect (continue-match match token))))
+             (loop for match in matches collect (continue-match match token))))
 
 (unless (boundp '*strings-to-concepts-hashmap*)
   (defparameter *strings-to-concepts-hashmap* (make-hash-table :test #'equal)
@@ -1079,7 +1079,7 @@
   "Get all Scone concepts associated with a particular string"
   (when str ; if STR is NIL, return NIL as well
     (gethash (string-upcase (remove-punctuation str))
-	     *strings-to-concepts-hashmap*)))
+             *strings-to-concepts-hashmap*)))
 
 (unless (boundp '*constructions*)
   (defparameter *constructions* nil
@@ -1107,9 +1107,9 @@
   (let ((se (meaning-scone-element *question*)))
     (in-context *last-parse-context*)
     (cond ((simple-is-x-a-y? se {is-a query})
-	   (setf *answer*
-		 (is-x-a-y? (get-mse 'first-thing  *question*)
-			    (get-mse 'second-thing *question*)))))))
+           (setf *answer*
+                 (is-x-a-y? (get-mse 'first-thing  *question*)
+                            (get-mse 'second-thing *question*)))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;                        ;;;
@@ -1178,58 +1178,58 @@
   "Shows information about a MEANING-SPAN when printing to a stream"
   (print-unreadable-object (object stream :type t)
     (format stream "~S ~S"
-	    (get-span-range object) (get-meaning-span-meaning object))))
+            (get-span-range object) (get-meaning-span-meaning object))))
 
 (defmethod print-object ((object right-hook) stream)
   "Shows information about a RIGHT-HOOK when printing to a stream"
   (print-unreadable-object (object stream :type t)
     (format stream "~S ~S"
-	    (get-span-range object)
-	    (get-right-hook-pattern object))))
+            (get-span-range object)
+            (get-right-hook-pattern object))))
 
 (defun combine-spans (span1 span2)
   (if (typep span2 'right-hook)
       (make-instance 'right-hook
-		     :range (subsume-range (copy-range (get-span-range span1))
-					   (get-span-range span2))
-		     :pattern (get-right-hook-pattern span2))
+                     :range (subsume-range (copy-range (get-span-range span1))
+                                           (get-span-range span2))
+                     :pattern (get-right-hook-pattern span2))
       (combine-spans span2 span1)))
 
 (defun finish-span (span matched-construction)
   (make-instance 'meaning-span
-		 :range (get-span-range span)
-		 :meaning matched-construction))
+                 :range (get-span-range span)
+                 :meaning matched-construction))
 
 (defun get-type (element)
   "Return ELEMENT if it's a type, and the parent of ELEMENT otherwise"
   (cond ((listp element) (mapcar #'get-type element))
-	((type-node? element) element)
-	(t (parent-element element))))
+        ((type-node? element) element)
+        (t (parent-element element))))
 
 (defun semi-equal (span1 span2)
   "See if two spans are equivalent in the semiring"
   (and (data-equalp (get-span-range span1) (get-span-range span2))
        (eq (class-of span1) (class-of span2))
        (if (typep span1 'meaning-span)
-	   (let* ((span1-mse
-		   (meaning-scone-element
-		    (get-meaning-span-meaning span1)))
-		  (span2-mse
-		   (meaning-scone-element
-		    (get-meaning-span-meaning span2)))
-		  (span1-type
-		   (if (stringp span1-mse)
-		       span1-mse
-		     (get-type span1-mse)))
-		  (span2-type
-		   (if (stringp span2-mse)
-		       span2-mse
-		     (get-type span2-mse))))
-	     (data-equalp span1-type span2-type))
-	   t)
+           (let* ((span1-mse
+                   (meaning-scone-element
+                    (get-meaning-span-meaning span1)))
+                  (span2-mse
+                   (meaning-scone-element
+                    (get-meaning-span-meaning span2)))
+                  (span1-type
+                   (if (stringp span1-mse)
+                       span1-mse
+                     (get-type span1-mse)))
+                  (span2-type
+                   (if (stringp span2-mse)
+                       span2-mse
+                     (get-type span2-mse))))
+             (data-equalp span1-type span2-type))
+           t)
        (if (typep span1 'right-hook)
-	   (eq (get-right-hook-pattern span1) (get-right-hook-pattern span2))
-	   t)))
+           (eq (get-right-hook-pattern span1) (get-right-hook-pattern span2))
+           t)))
 
 (defun semi-hash (data)
   "Hash function that simply returns the sum of the range start and end in a
@@ -1237,8 +1237,8 @@
   ;; todo: make start and end different and add in type as well
   (let ((range (get-span-range data)))
     (if (null (start-of range))
-	999999999
-	(+ (start-of range) (* 1000 (end-of range))))))
+        999999999
+        (+ (start-of range) (* 1000 (end-of range))))))
 
 (cl-custom-hash-table:define-custom-hash-table-constructor make-semiring-ht
     :test semi-equal :hash-function semi-hash)
@@ -1255,7 +1255,7 @@
   "See if item1 in the agenda completes a rule with item2 in the chart"
   (and (typep item1 'meaning-span) (typep item2 'right-hook)
        (or (null (start-of (get-span-range item2)))
-	   (right-after? (get-span-range item2) (get-span-range item1)))))
+           (right-after? (get-span-range item2) (get-span-range item1)))))
 
 (defparameter *semiring-zero* nil)
 (defparameter *semiring-one* nil)
@@ -1275,19 +1275,19 @@
   "Define how to create the value of a new chart element from the values of the
    two antecedent elements."
   (cond ((null value1) value2)
-	((not (matchp value2)) (semitimes value2 value1))
-	((or (zerop (get-score value1)) (zerop (get-score value2)))
-	 *semiring-zero*)
-	(t (let ((match-result (continue-match value2 value1)))
-	     (if (null match-result)
-		 *semiring-zero*
-		 match-result)))))
+        ((not (matchp value2)) (semitimes value2 value1))
+        ((or (zerop (get-score value1)) (zerop (get-score value2)))
+         *semiring-zero*)
+        (t (let ((match-result (continue-match value2 value1)))
+             (if (null match-result)
+                 *semiring-zero*
+                 match-result)))))
 
 (defun get-match-key (match)
   "Get the hash table key for a newly created match object"
   (make-instance 'right-hook
-		 :range (get-range-only match)
-		 :pattern (get-match-pattern match)))
+                 :range (get-range-only match)
+                 :pattern (get-match-pattern match)))
 
 (defun get-match-value (match)
   "Get the value of a match to put in the hash-table"
@@ -1310,25 +1310,25 @@
     ;; mostly for debugging
     (error "null item value"))
   (let* ((old-value (get-ht-value ht new-item))
-	 (result (semiplus old-value item-value))
-	 (ht-name (if (eq ht *chart*) "CHART" "AGENDA")))
+         (result (semiplus old-value item-value))
+         (ht-name (if (eq ht *chart*) "CHART" "AGENDA")))
     (if (data-equalp old-value result)
-	(when *print-add-failures*
-	  (print-debug "[~A] Failed to replace ~S~%       with ~S"
-		       ht-name old-value item-value))
-	(progn
-	  (if (seminull old-value)
-	      (print-debug "[~A] Adding ~S" ht-name item-value)
-	      (print-debug "[~A] Replacing ~S~%       with ~S"
-			   ht-name old-value item-value))
-	  (cl-custom-hash-table:with-custom-hash-table
-	    (setf (gethash new-item ht) result))))))
+        (when *print-add-failures*
+          (print-debug "[~A] Failed to replace ~S~%       with ~S"
+                       ht-name old-value item-value))
+        (progn
+          (if (seminull old-value)
+              (print-debug "[~A] Adding ~S" ht-name item-value)
+              (print-debug "[~A] Replacing ~S~%       with ~S"
+                           ht-name old-value item-value))
+          (cl-custom-hash-table:with-custom-hash-table
+            (setf (gethash new-item ht) result))))))
 
 (defun combine-antecedents (item1 item2)
   "Combine two antecedents and add consequent to agenda"
   (let ((new-span (combine-spans item1 item2))
-	(result (semitimes (get-ht-value *chart* item1)
-			   (get-ht-value *chart* item2))))
+        (result (semitimes (get-ht-value *chart* item1)
+                           (get-ht-value *chart* item2))))
     (unless (zerop (get-score result))
       (add-to-ht *agenda* new-span result))))
 
@@ -1336,22 +1336,22 @@
   "Turn into a meaning span with a finished construction if possible (i.e. a
   consequent formed from only one antecedent."
   (cond ((typep span 'right-hook)
-	 (let* ((value (get-ht-value *chart* span))
-		(completion (and value (can-be-completed? value))))
-	   (when completion
-	     (handler-case
-	      (let ((new-construction (make-matched-construction completion)))
-		(add-to-ht *agenda*
-			   (finish-span span new-construction)
-			   new-construction))
-	      (simple-error () nil)))))
-	((and (typep span 'meaning-span)
-	      *goal-span* ; in case this is null during development
-	      (data-equalp (get-span-range span) (get-span-range *goal-span*))
-	      (matched-constructionp (get-ht-value *chart* span)))
-	 (print-debug "[GOAL] Found new valid parse ~S"
-		      (get-ht-value *chart* span))
-	 (add-to-ht *agenda* *goal-span* (get-ht-value *chart* span)))))
+         (let* ((value (get-ht-value *chart* span))
+                (completion (and value (can-be-completed? value))))
+           (when completion
+             (handler-case
+              (let ((new-construction (make-matched-construction completion)))
+                (add-to-ht *agenda*
+                           (finish-span span new-construction)
+                           new-construction))
+              (simple-error () nil)))))
+        ((and (typep span 'meaning-span)
+              *goal-span* ; in case this is null during development
+              (data-equalp (get-span-range span) (get-span-range *goal-span*))
+              (matched-constructionp (get-ht-value *chart* span)))
+         (print-debug "[GOAL] Found new valid parse ~S"
+                      (get-ht-value *chart* span))
+         (add-to-ht *agenda* *goal-span* (get-ht-value *chart* span)))))
 
 (defun process-agenda-item (agenda-item)
   "Put agenda item into chart and see if it can produce any new consequents with
@@ -1369,23 +1369,23 @@
     (single-antecedent-satisfied? agenda-item)
     ;; have we found a better parse?
     (unless (data-equalp old-val (get-ht-value *chart* agenda-item))
-	;; yes we have, so now check with everything in the chart to see if
-	;; this can be combined with anything else to produce new parses
-	(cl-custom-hash-table:with-custom-hash-table
-	  (loop for chart-item being the hash-keys in *chart*
-	     do
-	       (when (both-antecedents-satisfied? agenda-item chart-item)
-		 (combine-antecedents agenda-item chart-item)))))))
+        ;; yes we have, so now check with everything in the chart to see if
+        ;; this can be combined with anything else to produce new parses
+        (cl-custom-hash-table:with-custom-hash-table
+          (loop for chart-item being the hash-keys in *chart*
+             do
+               (when (both-antecedents-satisfied? agenda-item chart-item)
+                 (combine-antecedents agenda-item chart-item)))))))
 
 (defun get-string-meanings (word position)
   "Retrieve a list of all meanings associated with a particular string"
   (loop for concept in (get-string-concepts word)
        collect (define-meaning concept position (1+ position)
-		 (str-pluralp word)
-		 (str-ends-in-commap word)
-		 (str-ends-in-periodp word)
-		 (str-ends-in-question-markp word)
-		 (or (get-element-property concept :score) 1))))
+                 (str-pluralp word)
+                 (str-ends-in-commap word)
+                 (str-ends-in-periodp word)
+                 (str-ends-in-question-markp word)
+                 (or (get-element-property concept :score) 1))))
 
 (defun setup-new-parse ()
   "Reset everything for a fresh parse"
@@ -1397,27 +1397,27 @@
   (let ((*print-debug* nil))
     (loop for new-match in *new-matches*
        do (add-to-ht *chart*
-		     (get-match-key new-match)
-		     (get-match-value new-match)))))
+                     (get-match-key new-match)
+                     (get-match-value new-match)))))
 
 (defun add-word-meanings-to-agenda (new-word position)
   "Add all meanings of a given string (including the raw string itself) to the
    agenda"
   (loop for concept in
        (nconc (list (define-meaning (remove-punctuation new-word)
-		      position
-		      (1+ position)
-		      (str-pluralp new-word)
-		      (str-ends-in-commap new-word)
-		      (str-ends-in-periodp new-word)
-		      (str-ends-in-question-markp new-word)
-		      (- 1 *string-as-concept-penalty*)))
-	      (get-string-meanings new-word position))
+                      position
+                      (1+ position)
+                      (str-pluralp new-word)
+                      (str-ends-in-commap new-word)
+                      (str-ends-in-periodp new-word)
+                      (str-ends-in-question-markp new-word)
+                      (- 1 *string-as-concept-penalty*)))
+              (get-string-meanings new-word position))
      do (add-to-ht *agenda*
-		   (make-instance 'meaning-span
-				  :range (define-range position 1)
-				  :meaning concept)
-		   (get-meaning-value concept))))
+                   (make-instance 'meaning-span
+                                  :range (define-range position 1)
+                                  :meaning concept)
+                   (get-meaning-value concept))))
 
 (defun parse-word (new-word position)
   "Given a new word at the next position in the sentence, keep on evaluating
@@ -1426,32 +1426,32 @@
   (loop while (> (hash-table-count *agenda*) 0)
      ;; may be doing repeated work here
      do (loop for key being the hash-keys of *agenda*
-	   do (process-agenda-item key))))
+           do (process-agenda-item key))))
 
 (defun semiring-parse (word-list start-position)
   "Run the semiring parsing algorithm on a sentence until the agenda is empty"
   ;; set what we want to get as a parse result
   (setf *goal-span*
-	(define-goal-span
-	  (define-range start-position (length word-list))))
+        (define-goal-span
+          (define-range start-position (length word-list))))
   ;; parse one word at a time
   (loop for word in word-list
-	do (progn
-	     (print-debug "Parsing ~S at ~d" word start-position)
-	     (parse-word word start-position)
-	     (setf start-position (1+ start-position))))
+        do (progn
+             (print-debug "Parsing ~S at ~d" word start-position)
+             (parse-word word start-position)
+             (setf start-position (1+ start-position))))
   ;; parse completed, now perform actions using parse result
   (let ((goal-value (get-ht-value *chart* *goal-span*)))
     (when goal-value
       (let ((se (meaning-scone-element goal-value)))
-	(if (matches? se {query})
-	    (progn
-	      (setf *question* goal-value)
-	      (answer-question))
-	  (progn
-	    (setf *last-parse-context* (matched-construction-context goal-value))
-	    (setf *question* nil)
-	    (setf *answer* nil)))))
+        (if (matches? se {query})
+            (progn
+              (setf *question* goal-value)
+              (answer-question))
+          (progn
+            (setf *last-parse-context* (matched-construction-context goal-value))
+            (setf *question* nil)
+            (setf *answer* nil)))))
     (in-context *last-parse-context*)
     goal-value))
 

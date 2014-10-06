@@ -32,21 +32,21 @@
   (x-is-a-y-of-z {table leg} {part} {table.n.02})
   
   (new-type {indefinite article (grammatical entity)}
-	    {article (grammatical entity)})
+            {article (grammatical entity)})
   (new-type {definite article (grammatical entity)}
-	    {article (grammatical entity)})
+            {article (grammatical entity)})
   (new-indv {a (article)}
-	    {indefinite article (grammatical entity)}
-	    :english "a")
+            {indefinite article (grammatical entity)}
+            :english "a")
   (new-indv {an (article)}
-	    {indefinite article (grammatical entity)}
-	    :english "an")
+            {indefinite article (grammatical entity)}
+            :english "an")
   (new-indv {the (article)}
-	    {definite article (grammatical entity)}
-	    :english "the")
+            {definite article (grammatical entity)}
+            :english "the")
 
   (new-type {to entity (grammatical entity)}
-	    {grammatical entity})
+            {grammatical entity})
 
   (new-indv {generic entity} {thing})
   
@@ -64,9 +64,9 @@
   (english {hammer.v.01} :verb "hammered")
 
   (new-relation {command}
-		:a-inst-of {entity}
-		:b-inst-of {entity}
-		:c-inst-of {action})
+                :a-inst-of {entity}
+                :b-inst-of {entity}
+                :c-inst-of {action})
   (new-is-a {command} {clause (grammatical entity)})
   
   (new-type {query} {thing})
@@ -100,23 +100,23 @@
    modifiers and is of type ENTITY"
   (when 
       (and (not (null article))
-	   (simple-is-x-a-y? (meaning-scone-element (first article))
-			     {definite article (grammatical entity)}))
+           (simple-is-x-a-y? (meaning-scone-element (first article))
+                             {definite article (grammatical entity)}))
     (with-markers (m um)
-		  (progn
-		    (mark-instances (meaning-scone-element (first entity))
-				    m)
-		    (mapcar (lambda (modifier)
-			      (do-marked (instance m)
-					 (unless (simple-is-x-a-y? instance
-								   (meaning-scone-element modifier))
-					   (mark instance um))))
-			    modifiers)
-		    (do-marked (instance um)
-			       (unmark instance m))
-		    (let ((instances (list-marked m)))
-		      (when (eq (length instances) 1)
-			(first instances)))))))
+                  (progn
+                    (mark-instances (meaning-scone-element (first entity))
+                                    m)
+                    (mapcar (lambda (modifier)
+                              (do-marked (instance m)
+                                         (unless (simple-is-x-a-y? instance
+                                                                   (meaning-scone-element modifier))
+                                           (mark instance um))))
+                            modifiers)
+                    (do-marked (instance um)
+                               (unmark instance m))
+                    (let ((instances (list-marked m)))
+                      (when (eq (length instances) 1)
+                        (first instances)))))))
 
 (defconstruction noun-phrase
     ((? {article (grammatical entity)} article)
@@ -124,25 +124,25 @@
      (= {entity} entity))
 
     (let* ((existing-node (find-element-with article modifiers entity))
-	   (new-node
-	    (or existing-node
-		(ensure-indv-exists
-		 (meaning-scone-element (first entity))))))
+           (new-node
+            (or existing-node
+                (ensure-indv-exists
+                 (meaning-scone-element (first entity))))))
       (progn
-	(unless existing-node ; then create it
-	  (mapcar (lambda (modifier)
-		    (new-is-a new-node (meaning-scone-element modifier)))
-		  modifiers)
-	  (when ; we are referring to "an <object>"
-	      (and (not (null article))
-		   (simple-is-x-a-y? (meaning-scone-element (first article))
-				     {indefinite article (grammatical entity)}))
-	    ;; then make this newly define object generic
-	    (new-is-a new-node {generic entity})
-	    ;; and make sure it is not treated as an adjective (because we created
-	    ;; IS-A links to each of the adjectives, but this itself is not an adjective)
-	    (new-is-not-a new-node {entity modifier})))
-	new-node)))
+        (unless existing-node ; then create it
+          (mapcar (lambda (modifier)
+                    (new-is-a new-node (meaning-scone-element modifier)))
+                  modifiers)
+          (when ; we are referring to "an <object>"
+              (and (not (null article))
+                   (simple-is-x-a-y? (meaning-scone-element (first article))
+                                     {indefinite article (grammatical entity)}))
+            ;; then make this newly define object generic
+            (new-is-a new-node {generic entity})
+            ;; and make sure it is not treated as an adjective (because we created
+            ;; IS-A links to each of the adjectives, but this itself is not an adjective)
+            (new-is-not-a new-node {entity modifier})))
+        new-node)))
 
 (defconstruction subentity
   ((= (:unstructured {entity}) bigger-entity)
@@ -161,7 +161,7 @@
   (mapcar #'meaning-scone-element items))
 
 (defmacro defaction (action-name action-in-between-name
-		     action-scone-element word1 word2)
+                     action-scone-element word1 word2)
   `(defconstructions ,(list action-name action-in-between-name)
      (((= ,word1 discard)
        (= ,word2 discard)
@@ -172,11 +172,11 @@
        (= ,word2 discard)))
      
      (let ((new-node (ensure-indv-exists ,action-scone-element))
-	   (action-object
-	    (when (not (null theme))
-	      (meaning-scone-element (first theme)))))
+           (action-object
+            (when (not (null theme))
+              (meaning-scone-element (first theme)))))
        (when (not (null action-object))
-	 (x-is-the-y-of-z action-object *action-object* new-node))
+         (x-is-the-y-of-z action-object *action-object* new-node))
        new-node)))
 
 (defaction hammer-in-x hammer-x-in {hammer.v.01} "hammer" "in")
@@ -203,13 +203,13 @@
        (= (:structured {entity}) recipient)))
 
      (let ((new-node (ensure-indv-exists ,action))
-	   (action-object
-	    (meaning-scone-element (first theme))))
+           (action-object
+            (meaning-scone-element (first theme))))
        (x-is-the-y-of-z action-object *action-object* new-node)
        (when recipient
-	 (x-is-the-y-of-z
-	  (meaning-scone-element (first recipient))
-	  *action-recipient* new-node))
+         (x-is-the-y-of-z
+          (meaning-scone-element (first recipient))
+          *action-recipient* new-node))
        new-node)))
 
 (deft-action hand-me-x hand-x-to-me {pass.v.05})
@@ -218,11 +218,11 @@
     ((= (:unstructured {action}) action)
      (? (:structured {entity}) theme))
     (let ((new-node (ensure-indv-exists (meaning-scone-element (first action))))
-	  (action-object
-	   (when (not (null theme))
-	     (meaning-scone-element (first theme)))))
+          (action-object
+           (when (not (null theme))
+             (meaning-scone-element (first theme)))))
       (when (not (null action-object))
-	(x-is-the-y-of-z action-object *action-object* new-node))
+        (x-is-the-y-of-z action-object *action-object* new-node))
       new-node))
 
 (defconstruction v-entities
@@ -235,8 +235,8 @@
   ((= (:structured {entity}) agent) (= (:structured {action}) action))
 
     (x-is-the-y-of-z (meaning-scone-element (first agent))
-		     *action-agent*
-		     (meaning-scone-element (first action)))
+                     *action-agent*
+                     (meaning-scone-element (first action)))
     (new-indv nil {action clause (grammatical entity)}))
 
 (defconstruction sentence
@@ -249,12 +249,12 @@
   ((= (:structured {entity}) agent) (= (:list {action}) actions))
   
   (mapcar (lambda (action)
-	    (x-is-the-y-of-z (meaning-scone-element (first agent))
-			     *action-agent*
-			     (meaning-scone-element action)))
-	  (gethash 'actions
-		   (get-matched-construction-components
-		    (first actions))))
+            (x-is-the-y-of-z (meaning-scone-element (first agent))
+                             *action-agent*
+                             (meaning-scone-element action)))
+          (gethash 'actions
+                   (get-matched-construction-components
+                    (first actions))))
   (new-indv nil {action clause (grammatical entity)}))
 
 (defconstruction clauses
