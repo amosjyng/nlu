@@ -1389,6 +1389,8 @@
 
 (defun setup-new-parse ()
   "Reset everything for a fresh parse"
+  (in-context {general})
+
   (setf *sentence-position* 0)
   (setf *goal-span* nil)
   (setf *agenda* (make-semiring-ht))
