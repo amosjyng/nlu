@@ -22,6 +22,10 @@
 ;;; NOTE: This is only the CxG matcher code! It does not come with a grammar.
 ;;; You must define your own. The default grammar is defined in grammar.lisp
 ;;;
+;;; To profile on SBCL, run
+;;; (require :sb-sprof)
+;;; (sb-sprof:with-profiling (:show-progress t :loop nil :report :graph)
+;;;  (nlu "Please pick up a large screwdriver and screw in the bolts."))
 
 ;;; TODO:
 ;;; Allow for parsing CSG's.
@@ -48,10 +52,10 @@
   "Penalty for using a string as-is (e.g. as an unknown word) in place
    of a Scone element for a MEANING object")
 
-(defparameter *print-debug* t
+(defparameter *print-debug* nil
   "Should we be printing information about the parse every step of the way?")
 
-(defparameter *print-add-failures* t
+(defparameter *print-add-failures* nil
   "Should we be printing failed adds to the hash table?")
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
