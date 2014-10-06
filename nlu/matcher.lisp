@@ -1249,10 +1249,9 @@
 
 (defun both-antecedents-satisfied? (item1 item2)
   "See if item1 in the agenda completes a rule with item2 in the chart"
-  (cond ((and (typep item1 'meaning-span)
-	      (typep item2 'right-hook))
-	 (or (null (start-of (get-span-range item2)))
-	     (right-after? (get-span-range item2) (get-span-range item1))))))
+  (and (typep item1 'meaning-span) (typep item2 'right-hook)
+       (or (null (start-of (get-span-range item2)))
+	   (right-after? (get-span-range item2) (get-span-range item1)))))
 
 (defparameter *semiring-zero* nil)
 (defparameter *semiring-one* nil)
