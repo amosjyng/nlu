@@ -48,11 +48,35 @@
   "Penalty for using a string as-is (e.g. as an unknown word) in place
    of a Scone element for a MEANING object")
 
+(defparameter *print-debug* nil
+  "Should we be printing information about the parse every step of the way?")
+
+(defparameter *print-add-failures* nil
+  "Should we be printing failed adds to the hash table?")
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;                                   ;;;
 ;;;     GENERAL UTILITY FUNCTIONS     ;;;
 ;;;                                   ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; should probably be in Scone instead
+(defun is-x-a-y-of-z? (x y z)
+  "See if element X is a role Y of element Z"
+  (member (lookup-element x) (list-all-x-of-y y z)))
+
+(defmacro print-debug (statement &rest args)
+  "When debugging is enabled, prints STATEMENT out to user"
+  `(when *print-debug*
+     (format t ,statement ,@args)
+     (format t "~%")))
+
+(defun reload-matcher ()
+  "Relaod this file
+
+   Used for development"
+  (load "nlu/matcher")
+  (setup-new-parse))
 
 (defun round-decimal (number shift)
   "Rounds a number to something"
@@ -449,6 +473,8 @@
 		 :score score))
 
 (defmacro defconstruction (construction-name elements &rest payload)
+  "Utility macro for defining new constructions and adding them to the global
+   list of constructions"
   `(progn
      (defparameter ,construction-name
        (make-instance 'construction
@@ -456,6 +482,17 @@
 		      :payload '(progn ,@payload)))
      (setf *constructions* (cons ,construction-name *constructions*))
      ,construction-name))
+
+(defmacro defconstructions (names patterns &rest payload)
+  "Define multiple constructions with the same payload but different
+   names and patterns"
+  `(progn
+     ,@(mapcar
+	(lambda (name pattern)
+	  `(defconstruction ,name
+	     ,pattern
+	     ,@payload))
+	names patterns)))
 
 (defun increment-range (range &optional (length 1))
   "Destructively increment the length of the range (by a default of 1)"
@@ -539,35 +576,32 @@
 (defmethod print-object ((object construction) stream)
   "Show the pattern of a construction"
   (print-unreadable-object (object stream :type t)
-    (format stream "~S" (get-construction-pattern object))))
+    (format stream "<~S>" (get-construction-pattern object))))
 
 (defmethod print-object ((object match) stream)
   "Show the current progress of a MATCH when printing it to a stream"
-  (print-unreadable-object (object stream :type t)
-    (format stream "~a ~S ~% ~S SCORE=~,3f"
-	    (get-range-string object)
-	    (insert-at #\. (get-match-pattern object)
-		       (1+ (match-progress object)))
-	    (build-parse-tree object)
-	    (match-score object))))
+  (format stream "|~S ~a ~%            ~S SCORE=~,2f|"
+	  (insert-at #\. (get-match-pattern object)
+		     (1+ (match-progress object)))
+	  (get-range-string object)
+	  (build-parse-tree object)
+	  (match-score object)))
 
 (defmethod print-object ((object matched-construction) stream)
   "Show the parse tree of a MATCHED-CONSTRUCTION when printing it to a stream"
-  (print-unreadable-object (object stream :type t)
-    (format stream "~a ~%~S SCORE=~,3f"
-	    (get-range-string object) (build-parse-tree object)
-	    (get-meaning-score object))))
+  (format stream "<~S ~a SCORE=~,2f>"
+	  (build-parse-tree object) (get-range-string object) 
+	  (get-meaning-score object)))
 
 (defmethod print-object ((object range) stream)
   "Show the start and end positions of a RANGE when printing it to a stream"
-  (print-unreadable-object (object stream :type t)
-    (format stream (get-range-string object))))
+  (format stream (get-range-string object)))
 
 (defmethod print-object ((object meaning) stream)
   "Shows which Scone node a MEANING is attached to when printing to a stream"
-  (print-unreadable-object (object stream :type t)
-    (format stream "~S ~a SCORE=~,3f" (meaning-scone-element object)
-	    (get-range-string object) (get-meaning-score object))))
+  (format stream "<~S ~a SCORE=~,2f>"
+	  (meaning-scone-element object) (get-range-string object)
+	  (get-meaning-score object)))
 
 (defun copy-range (range)
   "Create a copy of a RANGE object."
@@ -668,25 +702,22 @@
     (when (slot-boundp construction 'payload)
       ;; bind variables in matched-construction components to their values, and
       ;; then evaluate payload code
-      (let ((original-context *context*)
-	    (result
-	     (progn
-	       (setf *context* (new-context nil *context*))
-	       (loop for value being the hash-values in components
-		     do
-		     (when (matched-constructionp value)
-		       (new-is-a *context*
-				 (matched-construction-context value))))
-	       (in-context *context*) ; refresh markers
-	       (eval
-		`(let ,(loop for key being the hash-keys in components
-			     using (hash-value value)
-			     collect (construct-let-value key value))
-		   ,@(loop for key being the hash-keys in components
-			   collect `(declare (ignorable ,key)))
-		   ,(get-construction-payload construction))))))
-	;(in-context original-context)
-	result))))
+      (progn
+	(setf *context* (new-context nil *context*))
+	(loop for value being the hash-values in components
+	   do
+	     (when (matched-constructionp value)
+	       (new-is-a *context*
+			 (matched-construction-context value))))
+	(in-context *context*) ; refresh markers
+	;; let the calling function restore the previous context
+	(eval
+	 `(let ,(loop for key being the hash-keys in components
+		   using (hash-value value)
+		   collect (construct-let-value key value))
+	    ,@(loop for key being the hash-keys in components
+		 collect `(declare (ignorable ,key)))
+	    ,(get-construction-payload construction)))))))
 
 (defun increment-pattern-count (construction)
   "If a construction has been successfully matched, increment its count"
@@ -993,9 +1024,10 @@
   (remove-if #'null
 	     (loop for match in matches	collect (continue-match match token))))
 
-(defparameter *strings-to-concepts-hashmap* (make-hash-table :test #'equal)
-  "A hashmap with string tokens as keys and a list of associated Scone concepts
-   as values")
+(unless (boundp '*strings-to-concepts-hashmap*)
+  (defparameter *strings-to-concepts-hashmap* (make-hash-table :test #'equal)
+    "A hashmap with string tokens as keys and a list of associated Scone concepts
+     as values"))
 
 (defun str-ends-in-charp (str char)
   "See if a string ends in a certain character"
@@ -1045,8 +1077,9 @@
     (gethash (string-upcase (remove-punctuation str))
 	     *strings-to-concepts-hashmap*)))
 
-(defparameter *constructions* nil
-  "List of all defined constructions")
+(unless (boundp '*constructions*)
+  (defparameter *constructions* nil
+    "List of all defined constructions"))
 
 (defparameter *new-matches* (start-match-against-constructions *constructions*)
   "List of new matches started from all constructions")
@@ -1059,6 +1092,9 @@
 
 (defparameter *answer* nil
   "Answer to the *QUESTION* last asked, if any")
+
+(defparameter *sentence-position* nil
+  "Where we are right now in the global sentence stream")
 
 (defun answer-question ()
   "Set the *ANSWER* global variable to the appropriate response to the
@@ -1158,16 +1194,34 @@
 (defun finish-span (span matched-construction)
   (make-instance 'meaning-span
 		 :range (get-span-range span)
-		 :meaning (meaning-scone-element
-			   matched-construction)))
+		 :meaning matched-construction))
+
+(defun get-type (element)
+  "Return ELEMENT if it's a type, and the parent of ELEMENT otherwise"
+  (cond ((listp element) (mapcar #'get-type element))
+	((type-node? element) element)
+	(t (parent-element element))))
 
 (defun semi-equal (span1 span2)
   "See if two spans are equivalent in the semiring"
   (and (data-equalp (get-span-range span1) (get-span-range span2))
        (eq (class-of span1) (class-of span2))
        (if (typep span1 'meaning-span)
-	   (data-equalp (get-meaning-span-meaning span1)
-			(get-meaning-span-meaning span2))
+	   (let* ((span1-mse
+		   (meaning-scone-element
+		    (get-meaning-span-meaning span1)))
+		  (span2-mse
+		   (meaning-scone-element
+		    (get-meaning-span-meaning span2)))
+		  (span1-type
+		   (if (stringp span1-mse)
+		       span1-mse
+		     (get-type span1-mse)))
+		  (span2-type
+		   (if (stringp span2-mse)
+		       span2-mse
+		     (get-type span2-mse))))
+	     (data-equalp span1-type span2-type))
 	   t)
        (if (typep span1 'right-hook)
 	   (eq (get-right-hook-pattern span1) (get-right-hook-pattern span2))
@@ -1193,12 +1247,6 @@
   "Create a hash-table for the chart using SEMI-EQUAL as the comparison
    function and SEMI-HASH for the hash function")
 
-(defun reset-parse-tables ()
-  "Reset parsing hash tables (and *GOAL-SPAN*)"
-  (setf *agenda* (make-semiring-ht))
-  (setf *chart* (make-semiring-ht))
-  (setf *goal-span* nil))
-
 (defun both-antecedents-satisfied? (item1 item2)
   "See if item1 in the agenda completes a rule with item2 in the chart"
   (cond ((and (typep item1 'meaning-span)
@@ -1208,11 +1256,18 @@
 
 (defparameter *semiring-zero* nil)
 (defparameter *semiring-one* nil)
+
+(defun seminull (value)
+  "Check if a value is equal to semizing zero"
+  ;; for now just check if it's null, since semiring zero is NIL
+  (null value))
+
 (defun semiplus (value1 value2)
   "Define how to combine chart elements together."
   (if (> (get-score value1) (get-score value2))
-      value1
+      value1 ; old value
       value2))
+
 (defun semitimes (value1 value2)
   "Define how to create the value of a new chart element from the values of the
    two antecedent elements."
@@ -1235,12 +1290,6 @@
   "Get the value of a match to put in the hash-table"
   match)
 
-(defun get-meaning-key (meaning)
-  "Get the hash table key for a MEANING object"
-  (make-instance 'meaning-span
-		 :range (get-range-only meaning)
-		 :meaning (meaning-scone-element meaning)))
-
 (defun get-meaning-value (meaning)
   "Get the hash table value of some object that is to be used as a meaning"
   meaning)
@@ -1254,23 +1303,38 @@
 (defun add-to-ht (ht new-item item-value)
   "Set the value in HT associated with NEW-ITEM to (semiplus ITEM-VALUE
   existing-value"
-  (cl-custom-hash-table:with-custom-hash-table
-    (setf (gethash new-item ht)
-	  (semiplus (get-ht-value ht new-item) item-value))))
+  (when (null item-value)
+    ;; mostly for debugging
+    (error "null item value"))
+  (let* ((old-value (get-ht-value ht new-item))
+	 (result (semiplus old-value item-value))
+	 (ht-name (if (eq ht *chart*) "CHART" "AGENDA")))
+    (if (data-equalp old-value result)
+	(when *print-add-failures*
+	  (print-debug "[~A] Failed to replace ~S~%       with ~S"
+		       ht-name old-value item-value))
+	(progn
+	  (if (seminull old-value)
+	      (print-debug "[~A] Adding ~S" ht-name item-value)
+	      (print-debug "[~A] Replacing ~S~%       with ~S"
+			   ht-name old-value item-value))
+	  (cl-custom-hash-table:with-custom-hash-table
+	    (setf (gethash new-item ht) result))))))
 
 (defun combine-antecedents (item1 item2)
   "Combine two antecedents and add consequent to agenda"
-  (let ((result (semitimes (get-ht-value *chart* item1)
+  (let ((new-span (combine-spans item1 item2))
+	(result (semitimes (get-ht-value *chart* item1)
 			   (get-ht-value *chart* item2))))
     (unless (zerop (get-score result))
-      (add-to-ht *agenda* (combine-spans item1 item2) result))))
+      (add-to-ht *agenda* new-span result))))
 
 (defun single-antecedent-satisfied? (span)
   "Turn into a meaning span with a finished construction if possible (i.e. a
   consequent formed from only one antecedent."
   (cond ((typep span 'right-hook)
 	 (let* ((value (get-ht-value *chart* span))
-		(completion (can-be-completed? value)))
+		(completion (and value (can-be-completed? value))))
 	   (when completion
 	     (handler-case
 	      (let ((new-construction (make-matched-construction completion)))
@@ -1282,23 +1346,32 @@
 	      *goal-span* ; in case this is null during development
 	      (data-equalp (get-span-range span) (get-span-range *goal-span*))
 	      (matched-constructionp (get-ht-value *chart* span)))
+	 (print-debug "[GOAL] Found new valid parse ~S"
+		      (get-ht-value *chart* span))
 	 (add-to-ht *agenda* *goal-span* (get-ht-value *chart* span)))))
 
 (defun process-agenda-item (agenda-item)
   "Put agenda item into chart and see if it can produce any new consequents with
   existing items in the chart"
-  (let ((old-chart-value (get-ht-value *chart* agenda-item)))
+  (let ((old-val (get-ht-value *chart* agenda-item)))
     (add-to-ht *chart* agenda-item (get-ht-value *agenda* agenda-item))
     (cl-custom-hash-table:with-custom-hash-table
       (remhash agenda-item *agenda*))
-    (unless (data-equalp old-chart-value (get-ht-value *chart* agenda-item))
-      ;; for performance reasons that one function also handles putting things
-      ;; into the chart
-      (single-antecedent-satisfied? agenda-item)
-      (cl-custom-hash-table:with-custom-hash-table
-	(loop for chart-item being the hash-keys in *chart*
-	   do
-	     (if (both-antecedents-satisfied? agenda-item chart-item)
+    ;; for performance reasons that one function also handles putting things
+    ;; into the chart
+    ;; check now if antecedent satisfied, in case this doesn't beat out
+    ;; the old score but will do so as a finished construction (of
+    ;; course now the problem of this not beating out another item
+    ;; further on in the match is a problem)
+    (single-antecedent-satisfied? agenda-item)
+    ;; have we found a better parse?
+    (unless (data-equalp old-val (get-ht-value *chart* agenda-item))
+	;; yes we have, so now check with everything in the chart to see if
+	;; this can be combined with anything else to produce new parses
+	(cl-custom-hash-table:with-custom-hash-table
+	  (loop for chart-item being the hash-keys in *chart*
+	     do
+	       (when (both-antecedents-satisfied? agenda-item chart-item)
 		 (combine-antecedents agenda-item chart-item)))))))
 
 (defun get-string-meanings (word position)
@@ -1312,12 +1385,17 @@
 		 (or (get-element-property concept :score) 1))))
 
 (defun setup-new-parse ()
-  "Initialize chart with new matches"
-  (reset-parse-tables)
-  (loop for new-match in *new-matches*
-     do (add-to-ht *chart*
-		   (get-match-key new-match)
-		   (get-match-value new-match))))
+  "Reset everything for a fresh parse"
+  (setf *sentence-position* 0)
+  (setf *goal-span* nil)
+  (setf *agenda* (make-semiring-ht))
+  (setf *chart* (make-semiring-ht))
+  
+  (let ((*print-debug* nil))
+    (loop for new-match in *new-matches*
+       do (add-to-ht *chart*
+		     (get-match-key new-match)
+		     (get-match-value new-match)))))
 
 (defun add-word-meanings-to-agenda (new-word position)
   "Add all meanings of a given string (including the raw string itself) to the
@@ -1349,13 +1427,17 @@
 
 (defun semiring-parse (word-list start-position)
   "Run the semiring parsing algorithm on a sentence until the agenda is empty"
+  ;; set what we want to get as a parse result
   (setf *goal-span*
 	(define-goal-span
 	  (define-range start-position (length word-list))))
+  ;; parse one word at a time
   (loop for word in word-list
 	do (progn
+	     (print-debug "Parsing ~S at ~d" word start-position)
 	     (parse-word word start-position)
 	     (setf start-position (1+ start-position))))
+  ;; parse completed, now perform actions using parse result
   (let ((goal-value (get-ht-value *chart* *goal-span*)))
     (when goal-value
       (let ((se (meaning-scone-element goal-value)))
@@ -1374,6 +1456,30 @@
   "Get the result of the latest parse"
   (get-ht-value *chart* *goal-span*))
 
+(defun get-agenda-values ()
+  "Get all values from the agenda
+
+  Used only for debugging"
+  (loop for v being the hash-values of *agenda* collect v))
+
 (defun get-chart-values ()
-  "Get all values from the chart"
+  "Get all values from the chart
+
+  Used only for debugging"
   (loop for v being the hash-values of *chart* collect v))
+
+;; allow for loading this file without warnings
+(unless (fboundp 'lispify)
+  (defun lispify (goal-value)
+    "Turn a matched construction into a Lisp list"
+    (list goal-value) ; just to get rid of warning
+    (error "LISPIFY function must be redefined inside grammar file!")))
+
+(defun nlu (sentence)
+  "Create a Lisp representation of a natural language sentence"
+  (when (zerop (hash-table-count *chart*))
+    (setup-new-parse))
+  (let* ((word-list (split-sequence:split-sequence #\Space sentence))
+	 (parse-result (semiring-parse word-list *sentence-position*)))
+    (incf *sentence-position* (length word-list))
+    (lispify parse-result)))

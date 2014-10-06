@@ -11,7 +11,7 @@
 (prefer {nail.n.02})
 (prefer {screwdriver.n.01})
 (prefer {table.n.02})
-(prefer {table leg})
+(prefer-not {table leg})
 
 (prefer-not {up.v.01})
 ;;; this shouldn't be an {action}

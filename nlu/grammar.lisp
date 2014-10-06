@@ -94,17 +94,6 @@
 
 (defparameter *constructions* nil)
 
-(defmacro defconstructions (names patterns &rest payload)
-  "Define multiple constructions with the same payload but different
-   names and patterns"
-  `(progn
-     ,@(mapcar
-	(lambda (name pattern)
-	  `(defconstruction ,name
-	     ,pattern
-	     ,@payload))
-	names patterns)))
-
 (defun find-element-with (article modifiers entity)
   "Given an article, modifiers, and a Scone element representing an
    entity, find the one Scone individual (if any) that matches all
@@ -154,10 +143,6 @@
 	    ;; IS-A links to each of the adjectives, but this itself is not an adjective)
 	    (new-is-not-a new-node {entity modifier})))
 	new-node)))
-
-(defun is-x-a-y-of-z? (x y z)
-  "See if element X is a role Y of element Z"
-  (member (lookup-element x) (list-all-x-of-y y z)))
 
 (defconstruction subentity
   ((= (:unstructured {entity}) bigger-entity)
@@ -523,12 +508,3 @@
 			     {sentence (grammatical entity)})
 	   (lispify-sentence goal-value))
 	  (t goal-value))))
-
-(defun nlu (sentence)
-  "Create a Lisp representation of a natural language sentence"
-  (when (zerop (hash-table-count *chart*))
-    (setup-new-parse))
-  (let* ((word-list (split-sequence:split-sequence #\Space sentence))
-	 (parse-result (semiring-parse word-list *sentence-position*)))
-    (incf *sentence-position* (length word-list))
-    (lispify parse-result)))
