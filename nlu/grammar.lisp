@@ -140,15 +140,19 @@
 		(ensure-indv-exists
 		 (meaning-scone-element (first entity))))))
       (progn
-	(unless existing-node
+	(unless existing-node ; then create it
 	  (mapcar (lambda (modifier)
 		    (new-is-a new-node (meaning-scone-element modifier)))
 		  modifiers)
-	  (when
+	  (when ; we are referring to "an <object>"
 	      (and (not (null article))
 		   (simple-is-x-a-y? (meaning-scone-element (first article))
 				     {indefinite article (grammatical entity)}))
-	    (new-is-a new-node {generic entity})))
+	    ;; then make this newly define object generic
+	    (new-is-a new-node {generic entity})
+	    ;; and make sure it is not treated as an adjective (because we created
+	    ;; IS-A links to each of the adjectives, but this itself is not an adjective)
+	    (new-is-not-a new-node {entity modifier})))
 	new-node)))
 
 (defun is-x-a-y-of-z? (x y z)
