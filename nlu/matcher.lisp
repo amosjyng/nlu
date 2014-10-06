@@ -48,10 +48,10 @@
   "Penalty for using a string as-is (e.g. as an unknown word) in place
    of a Scone element for a MEANING object")
 
-(defparameter *print-debug* nil
+(defparameter *print-debug* t
   "Should we be printing information about the parse every step of the way?")
 
-(defparameter *print-add-failures* nil
+(defparameter *print-add-failures* t
   "Should we be printing failed adds to the hash table?")
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1233,8 +1233,8 @@
   ;; todo: make start and end different and add in type as well
   (let ((range (get-span-range data)))
     (if (null (start-of range))
-	999999
-	(+ (start-of range) (end-of range)))))
+	999999999
+	(+ (start-of range) (* 1000 (end-of range))))))
 
 (cl-custom-hash-table:define-custom-hash-table-constructor make-semiring-ht
     :test semi-equal :hash-function semi-hash)
