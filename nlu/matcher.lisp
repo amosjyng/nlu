@@ -24,7 +24,7 @@
 ;;;
 ;;; To profile on SBCL, run
 ;;; (require :sb-sprof)
-;;; (sb-sprof:with-profiling (:show-progress t :loop nil :report :graph)
+;;; (sb-sprof:with-profiling (:show-progress t :loop t :report :graph)
 ;;;  (nlu "Please pick up a large screwdriver and screw in the bolts."))
 
 ;;; TODO:
@@ -396,8 +396,9 @@
    Assumes that if the first argument is a dotted pair, the second list is one
    as well."
   (if (listp (cdr data1))
-      (loop for x in data1 for y in data2 ; check all elements the same
-         always (data-equalp x y))
+      (and (eq (length data1) (length data2))
+           (loop for x in data1 for y in data2 ; check all elements the same
+              always (data-equalp x y)))
       (and (data-equalp (car data1) (car data2)) ; check two elements the same
            (data-equalp (cdr data1) (cdr data2)))))
 
@@ -674,7 +675,10 @@
   (equal (1+ (match-progress match)) (length (get-match-pattern match))))
 
 (defun can-be-completed? (match)
-  "See if a match object can be turned into a MATCHED-CONSTRUCTION"
+  "See if a match object can be turned into a MATCHED-CONSTRUCTION
+
+   If so, returns the version of the match with the progress fast-forwarded to
+   the end"
   (or (and (is-completed? match) match) ; return completed match
       (let ((next-expected-token (get-next-expected-token match))
             (match-copy (copy-match match)))
@@ -1267,21 +1271,29 @@
 
 (defun semiplus (value1 value2)
   "Define how to combine chart elements together."
-  (if (> (get-score value1) (get-score value2))
-      value1 ; old value
-      value2))
+  (cond ((listp value1) ; then value2 should be a list of matches too
+         (append value1 value2)) ; just add list of matches together
+        (t ; otherwise they're meanings. pick the meaning w/ highest score
+         (if (> (get-score value1) (get-score value2))
+             value1
+             value2))))
 
 (defun semitimes (value1 value2)
   "Define how to create the value of a new chart element from the values of the
    two antecedent elements."
   (cond ((null value1) value2)
-        ((not (matchp value2)) (semitimes value2 value1))
-        ((or (zerop (get-score value1)) (zerop (get-score value2)))
-         *semiring-zero*)
-        (t (let ((match-result (continue-match value2 value1)))
-             (if (null match-result)
-                 *semiring-zero*
-                 match-result)))))
+        ;; value1 should always be the value instead of the match
+        ((not (listp value2)) (semitimes value2 value1))
+        (t
+         (let ((results
+                (remove-if (lambda (match) ; keep only valid matches
+                             (or (null match) (zerop (get-score match))))
+                           (mapcar (lambda (match)
+                                     (continue-match match value1))
+                                   value2))))
+           (if (null results)
+               *semiring-zero* ; keep it general
+               results)))))
 
 (defun get-match-key (match)
   "Get the hash table key for a newly created match object"
@@ -1291,7 +1303,7 @@
 
 (defun get-match-value (match)
   "Get the value of a match to put in the hash-table"
-  match)
+  (list match))
 
 (defun get-meaning-value (meaning)
   "Get the hash table value of some object that is to be used as a meaning"
@@ -1329,22 +1341,23 @@
   (let ((new-span (combine-spans item1 item2))
         (result (semitimes (get-ht-value *chart* item1)
                            (get-ht-value *chart* item2))))
-    (unless (zerop (get-score result))
+    (unless (seminull result)
       (add-to-ht *agenda* new-span result))))
 
 (defun single-antecedent-satisfied? (span)
   "Turn into a meaning span with a finished construction if possible (i.e. a
   consequent formed from only one antecedent."
   (cond ((typep span 'right-hook)
-         (let* ((value (get-ht-value *chart* span))
-                (completion (and value (can-be-completed? value))))
-           (when completion
-             (handler-case
-              (let ((new-construction (make-matched-construction completion)))
-                (add-to-ht *agenda*
-                           (finish-span span new-construction)
-                           new-construction))
-              (simple-error () nil)))))
+         (mapcar
+          (lambda (match)
+            (let ((completion (can-be-completed? match)))
+              (when completion
+                (handler-case
+                    (let ((new-cons (make-matched-construction completion)))
+                      (add-to-ht *agenda*
+                                 (finish-span span new-cons) new-cons))
+                  (simple-error () nil)))))
+          (get-ht-value *chart* span)))
         ((and (typep span 'meaning-span)
               *goal-span* ; in case this is null during development
               (data-equalp (get-span-range span) (get-span-range *goal-span*))
