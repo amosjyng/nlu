@@ -595,7 +595,7 @@
 (defmethod print-object ((object matched-construction) stream)
   "Show the parse tree of a MATCHED-CONSTRUCTION when printing it to a stream"
   (format stream "<~S ~a SCORE=~,2f>"
-          (build-parse-tree object) (get-range-string object) 
+          (lispify object) (get-range-string object) 
           (get-meaning-score object)))
 
 (defmethod print-object ((object range) stream)
