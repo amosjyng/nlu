@@ -1197,6 +1197,7 @@
             (get-right-hook-pattern object))))
 
 (defun combine-spans (span1 span2)
+  "Combine two ranges (assumes span1 begins before span2)"
   (if (typep span2 'right-hook)
       (make-instance 'right-hook
                      :range (subsume-range (copy-range (get-span-range span1))
