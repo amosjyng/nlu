@@ -28,7 +28,9 @@
   (new-indv {first person} {first_person.n.01})
   (new-indv {second person} {second_person.n.01})
 
-  (new-type {table leg} {tangible} :english "leg")
+  (new-eq {physical_entity.n.01} {tangible})
+
+  (new-type {table leg} {leg.n.03} :english "leg")
   (x-is-a-y-of-z {table leg} {part} {table.n.02})
   
   (new-type {indefinite article (grammatical entity)}
