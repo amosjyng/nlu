@@ -1145,7 +1145,7 @@
 (defclass meaning-span (span)
   ((meaning
     :documentation
-    "The meaning of something that covers a certain range of the sentence"
+    "The Scone element that represents a certain part of a sentence"
     :type meaning
     :initarg :meaning
     :initform (error "You MUST provide the meaning this is associated with!")
@@ -1204,11 +1204,6 @@
                      :pattern (get-right-hook-pattern span2))
       (combine-spans span2 span1)))
 
-(defun finish-span (span matched-construction)
-  (make-instance 'meaning-span
-                 :range (get-span-range span)
-                 :meaning matched-construction))
-
 (defun get-type (element)
   "Return ELEMENT if it's a type, and the parent of ELEMENT otherwise"
   (cond ((listp element) (mapcar #'get-type element))
@@ -1221,11 +1216,9 @@
        (eq (class-of span1) (class-of span2))
        (if (typep span1 'meaning-span)
            (let* ((span1-mse
-                   (meaning-scone-element
-                    (get-meaning-span-meaning span1)))
+                   (get-meaning-span-meaning span1))
                   (span2-mse
-                   (meaning-scone-element
-                    (get-meaning-span-meaning span2)))
+                   (get-meaning-span-meaning span2))
                   (span1-type
                    (if (stringp span1-mse)
                        span1-mse
@@ -1310,6 +1303,12 @@
   "Get the value of a match to put in the hash-table"
   (list match))
 
+(defun get-meaning-key (meaning)
+  "Get the hash table key for a newly created meaning object"
+  (make-instance 'meaning-span
+                 :range (get-range-only meaning)
+                 :meaning (meaning-scone-element meaning)))
+
 (defun get-meaning-value (meaning)
   "Get the hash table value of some object that is to be used as a meaning"
   meaning)
@@ -1349,20 +1348,31 @@
     (unless (seminull result)
       (add-to-ht *agenda* new-span result))))
 
+(defun complete-and-add (match)
+  "When possible, turn a match into a matched-construction, and add it to the
+   agenda"
+  (let ((completion (can-be-completed? match)))
+    (when completion
+      (handler-case
+          (let ((new-cons (make-matched-construction match)))
+            (add-to-ht *agenda* (get-meaning-key new-cons) new-cons))
+        (simple-error (se)
+          (when *print-matched-construction-failures*
+              (print-debug "~S" se)))))))
+
 (defun single-antecedent-satisfied? (span)
   "Turn into a meaning span with a finished construction if possible (i.e. a
   consequent formed from only one antecedent."
   (cond ((typep span 'right-hook)
-         (mapcar
-          (lambda (match)
-            (let ((completion (can-be-completed? match)))
-              (when completion
-                (handler-case
-                    (let ((new-cons (make-matched-construction completion)))
-                      (add-to-ht *agenda*
-                                 (finish-span span new-cons) new-cons))
-                  (simple-error () nil)))))
-          (get-ht-value *chart* span)))
+         (let* ((matches (get-ht-value *chart* span))
+                (incomplete (remove-if #'is-completed? matches)))
+           (mapcar #'complete-and-add matches)
+           (unless (equal matches incomplete)
+             (print-debug "[CHART] Removing complete ~S~%     incomplete: ~S"
+                          matches incomplete))
+           (cl-custom-hash-table:with-custom-hash-table
+             (setf (gethash span *chart*)
+                   incomplete))))
         ((and (typep span 'meaning-span)
               *goal-span* ; in case this is null during development
               (data-equalp (get-span-range span) (get-span-range *goal-span*))
@@ -1434,9 +1444,7 @@
                       (- 1 *string-as-concept-penalty*)))
               (get-string-meanings new-word position))
      do (add-to-ht *agenda*
-                   (make-instance 'meaning-span
-                                  :range (define-range position 1)
-                                  :meaning concept)
+                   (get-meaning-key concept)
                    (get-meaning-value concept))))
 
 (defun parse-word (new-word position)
