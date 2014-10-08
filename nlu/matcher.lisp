@@ -58,6 +58,10 @@
 (defparameter *print-add-failures* nil
   "Should we be printing failed adds to the hash table?")
 
+(defparameter *print-matched-construction-failures* nil
+  "Should we be printing errors about completed matches that failed to be turned
+   into matched constructions?")
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;                                   ;;;
 ;;;     GENERAL UTILITY FUNCTIONS     ;;;
@@ -227,7 +231,7 @@
      CONSTRUCTION (e.g. if this were a noun phrase CONSTRUCTION, the
      payload may return a new INDV node that contains
      is-a links to each of the adjectives in the noun phrase)."
-    :type list ; Lisp code, which is basically just a list
+    :type function
     :initarg :payload
     :reader get-construction-payload)
    (score-multiplier
@@ -484,7 +488,10 @@
      (defparameter ,construction-name
        (make-instance 'construction
                       :elements ',elements
-                      :payload '(progn ,@payload)))
+                      :payload
+                      (lambda (&key ,@(remove-duplicates
+                                       (mapcar #'third elements)))
+                        ,@payload)))
      (setf *constructions* (cons ,construction-name *constructions*))
      ,construction-name))
 
@@ -719,13 +726,11 @@
                          (matched-construction-context value))))
         (in-context *context*) ; refresh markers
         ;; let the calling function restore the previous context
-        (eval
-         `(let ,(loop for key being the hash-keys in components
-                   using (hash-value value)
-                   collect (construct-let-value key value))
-            ,@(loop for key being the hash-keys in components
-                 collect `(declare (ignorable ,key)))
-            ,(get-construction-payload construction)))))))
+        (apply (get-construction-payload construction)
+               (apply #'append
+                (loop for k being the hash-key
+                   using (hash-value v) of components
+                   collect (list (intern (string-upcase k) "KEYWORD") v))))))))
 
 (defun increment-pattern-count (construction)
   "If a construction has been successfully matched, increment its count"
