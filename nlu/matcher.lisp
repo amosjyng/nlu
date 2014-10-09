@@ -62,6 +62,9 @@
   "Should we be printing errors about completed matches that failed to be turned
    into matched constructions?")
 
+(defparameter *debug-payload* nil
+  "Print relevant information about the payload while it is being created")
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;                                   ;;;
 ;;;     GENERAL UTILITY FUNCTIONS     ;;;
@@ -270,7 +273,7 @@
     "The context in which this matched construction was created"
     :type structure-object
     :initarg :context
-    :accessor matched-construction-context))
+    :accessor context-of))
   (:documentation
    "A class which represents a successfully matched MATCHED-CONSTRUCTION, as
     well as various information about it, such as how it was created."))
@@ -702,6 +705,19 @@
   ;; list or not, the LET expression is a bit different
   `(,key ,(if (listp value) `(list ,@value) value)))
 
+(defun component-contexts (match)
+  "Get a list of contexts for the components of a match"
+  (apply #'append
+         (loop for v being the hash-values in (match-so-far match)
+            collect (loop for c in v
+                       if (matched-constructionp c) collect (context-of c)))))
+
+(defun payload-argument-list (components)
+  "Get the payload function arguments for components of a finished match"
+  (apply #'append
+         (loop for k being the hash-key using (hash-value v) of components
+            collect (list (intern (string-upcase k) "KEYWORD") v))))
+
 (defun run-payload (new-match)
   "If the matched-construction rule's payload is not NIL, run the payload
    against the matched elements.
@@ -718,19 +734,21 @@
       ;; bind variables in matched-construction components to their values, and
       ;; then evaluate payload code
       (progn
-        (setf *context* (new-context nil *context*))
-        (loop for value being the hash-values in components
-           do
-             (when (matched-constructionp value)
-               (new-is-a *context*
-                         (matched-construction-context value))))
-        (in-context *context*) ; refresh markers
+        (let ((new-context
+               (new-context nil
+                            (cons *context* (component-contexts new-match)))))
+          (in-context new-context)
+          (when *debug-payload*
+            (print-debug "[PAYLOAD] Creating construction for match ~S"
+                         new-match)
+            (print-debug "[PAYLOAD] Creating new context ~S from contexts ~S"
+                         new-context (component-contexts new-match))))
         ;; let the calling function restore the previous context
+        (when *debug-payload*
+          (print-debug "[PAYLOAD] Calling payload with arguments ~S"
+                       (payload-argument-list components)))
         (apply (get-construction-payload construction)
-               (apply #'append
-                (loop for k being the hash-key
-                   using (hash-value v) of components
-                   collect (list (intern (string-upcase k) "KEYWORD") v))))))))
+               (payload-argument-list components))))))
 
 (defun increment-pattern-count (construction)
   "If a construction has been successfully matched, increment its count"
@@ -759,6 +777,15 @@
 (defun get-components (component-name construction)
   "Get the values for that component in a construction"
   (gethash component-name (get-matched-construction-components construction)))
+
+(defun components-list (construction)
+  "Get an association list of the components inside a construction
+
+   Used only for debugging"
+  (loop for k being the hash-keys of
+       (get-matched-construction-components construction)
+       using (hash-value v)
+       collect (cons k v)))
 
 (defun get-first-component (component-name construction)
   "Extract component from hash map of construction"
@@ -820,7 +847,7 @@
   "See if the Scone node associated with ACTUAL-TOKEN IS-A EXPECTED-TOKEN"
   (let ((original-context *context*)
         (meaning (meaning-scone-element actual-token)))
-    (in-context (matched-construction-context actual-token))
+    (in-context (context-of actual-token))
     (let ((result (matches? meaning expected-token)))
       (in-context original-context)
       result)))
@@ -1018,7 +1045,7 @@
                         (ends-in-question-markp
                          (get-last-match-component new-match))
                         :scone-element (run-payload new-match))))
-    (setf (matched-construction-context matched-construction) *context*)
+    (setf (context-of matched-construction) *context*)
     (in-context *last-parse-context*)
     matched-construction))
 
@@ -1478,27 +1505,46 @@
               (setf *question* goal-value)
               (answer-question))
           (progn
-            (setf *last-parse-context* (matched-construction-context goal-value))
+            (setf *last-parse-context* (context-of goal-value))
             (setf *question* nil)
             (setf *answer* nil)))))
     (in-context *last-parse-context*)
     goal-value))
 
 (defun get-goal-value ()
-  "Get the result of the latest parse"
+  "Get the result of the latest parse
+
+   Used only for debugging"
   (get-ht-value *chart* *goal-span*))
 
 (defun get-agenda-values ()
   "Get all values from the agenda
 
-  Used only for debugging"
+   Used only for debugging"
   (loop for v being the hash-values of *agenda* collect v))
 
 (defun get-chart-values ()
   "Get all values from the chart
 
-  Used only for debugging"
+   Used only for debugging"
   (loop for v being the hash-values of *chart* collect v))
+
+(defun cons-that-mean (meaning)
+  "Get all matched constructions whose meanings are MEANING
+
+   Used only for debugging"
+  (remove-if-not
+   (lambda (value)
+     (and (matched-constructionp value)
+          (simple-is-x-eq-y? (meaning-scone-element value) meaning)))
+   (get-chart-values)))
+
+(defun cons-that-means (meaning)
+  "Gets only the first matched construction whose meaning is MEANING
+
+   Useful when there's only one such matched construction. Used only for
+   debugging"
+  (first (cons-that-mean meaning)))
 
 ;; allow for loading this file without warnings
 (unless (fboundp 'lispify)
