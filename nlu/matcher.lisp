@@ -55,10 +55,10 @@
 (defparameter *print-debug* nil
   "Should we be printing information about the parse every step of the way?")
 
-(defparameter *print-add-failures* nil
+(defparameter *debug-add-failures* nil
   "Should we be printing failed adds to the hash table?")
 
-(defparameter *print-matched-construction-failures* nil
+(defparameter *debug-con-creation* nil
   "Should we be printing errors about completed matches that failed to be turned
    into matched constructions?")
 
@@ -1357,7 +1357,7 @@
          (result (semiplus old-value item-value))
          (ht-name (if (eq ht *chart*) "CHART" "AGENDA")))
     (if (data-equalp old-value result)
-        (when *print-add-failures*
+        (when *debug-add-failures*
           (print-debug "[~A] Failed to replace ~S~%       with ~S"
                        ht-name old-value item-value))
         (progn
@@ -1385,7 +1385,7 @@
           (let ((new-cons (make-matched-construction match)))
             (add-to-ht *agenda* (get-meaning-key new-cons) new-cons))
         (simple-error (se)
-          (when *print-matched-construction-failures*
+          (when *debug-con-creation*
               (print-debug "~S" se)))))))
 
 (defun single-antecedent-satisfied? (span)
