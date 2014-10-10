@@ -52,18 +52,21 @@
   "Penalty for using a string as-is (e.g. as an unknown word) in place
    of a Scone element for a MEANING object")
 
-(defparameter *print-debug* nil
-  "Should we be printing information about the parse every step of the way?")
+;;; DEBUGGING PARAMETERS
+(defparameter *debug-ht-update* nil
+  "Print successful updates to the chart/agenda")
 
 (defparameter *debug-add-failures* nil
-  "Should we be printing failed adds to the hash table?")
+  "Print failed adds to the chart/agenda")
 
 (defparameter *debug-con-creation* nil
-  "Should we be printing errors about completed matches that failed to be turned
-   into matched constructions?")
+  "Print errors from completed matches that can't become matched constructions")
 
 (defparameter *debug-payload* nil
   "Print relevant information about the payload while it is being created")
+
+(defparameter *debug-goal-discovery* nil
+  "Print all newly discovered potential goal values")
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;                                   ;;;
@@ -77,10 +80,10 @@
   (member (lookup-element x) (list-all-x-of-y y z)))
 
 (defmacro print-debug (statement &rest args)
-  "When debugging is enabled, prints STATEMENT out to user"
-  `(when *print-debug*
-     (format t ,statement ,@args)
-     (format t "~%")))
+  "Prints debugging STATEMENT out to user"
+  `(progn
+     (format *error-output* ,statement ,@args)
+     (format *error-output* "~%")))
 
 (defun reload-matcher ()
   "Relaod this file
@@ -88,6 +91,16 @@
    Used for development"
   (load "nlu/matcher")
   (setup-new-parse))
+
+(defun debug-all ()
+  "Set all debug global variables to true
+
+   Only used for debugging"
+  (setf *debug-ht-update* t)
+  (setf *debug-add-failures* t)
+  (setf *debug-con-creation* t)
+  (setf *debug-payload* t)
+  (setf *debug-goal-discovery* t))
 
 (defun round-decimal (number shift)
   "Rounds a number to something"
@@ -1361,10 +1374,11 @@
           (print-debug "[~A] Failed to replace ~S~%       with ~S"
                        ht-name old-value item-value))
         (progn
-          (if (seminull old-value)
-              (print-debug "[~A] Adding ~S" ht-name item-value)
-              (print-debug "[~A] Replacing ~S~%       with ~S"
-                           ht-name old-value item-value))
+          (when *debug-ht-update*
+            (if (seminull old-value)
+                (print-debug "[~A] Adding ~S" ht-name item-value)
+                (print-debug "[~A] Replacing ~S~%       with ~S"
+                             ht-name old-value item-value)))
           (cl-custom-hash-table:with-custom-hash-table
             (setf (gethash new-item ht) result))))))
 
@@ -1395,7 +1409,7 @@
          (let* ((matches (get-ht-value *chart* span))
                 (incomplete (remove-if #'is-completed? matches)))
            (mapcar #'complete-and-add matches)
-           (unless (equal matches incomplete)
+           (when (and *debug-ht-update* (equal matches incomplete))
              (print-debug "[CHART] Removing complete ~S~%     incomplete: ~S"
                           matches incomplete))
            (cl-custom-hash-table:with-custom-hash-table
@@ -1405,8 +1419,9 @@
               *goal-span* ; in case this is null during development
               (data-equalp (get-span-range span) (get-span-range *goal-span*))
               (matched-constructionp (get-ht-value *chart* span)))
-         (print-debug "[GOAL] Found new valid parse ~S"
-                      (get-ht-value *chart* span))
+         (when *debug-goal-discovery*
+           (print-debug "[GOAL] Found new valid parse ~S"
+                        (get-ht-value *chart* span)))
          (add-to-ht *agenda* *goal-span* (get-ht-value *chart* span)))))
 
 (defun process-agenda-item (agenda-item)
@@ -1454,7 +1469,7 @@
   
   (setf *new-matches* (start-match-against-constructions *constructions*))
   
-  (let ((*print-debug* nil))
+  (let ((*debug-ht-update* nil))
     (loop for new-match in *new-matches*
        do (add-to-ht *chart*
                      (get-match-key new-match)
@@ -1495,7 +1510,6 @@
   ;; parse one word at a time
   (loop for word in word-list
         do (progn
-             (print-debug "Parsing ~S at ~d" word start-position)
              (parse-word word start-position)
              (setf start-position (1+ start-position))))
   ;; parse completed, now perform actions using parse result
