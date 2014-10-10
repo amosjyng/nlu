@@ -5,7 +5,8 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; allow this file to be loaded multiple times
-(when (zerop (hash-table-count *strings-to-concepts-hashmap*))
+(unless (handler-case (lookup-element-test {grammatical entity})
+          (simple-error () nil))
   (new-type {grammatical entity} {thing})
   (new-eq {entity} {entity.n.01})
   (new-type {specific entity} {entity})
