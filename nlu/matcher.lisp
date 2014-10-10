@@ -1452,6 +1452,8 @@
   (setf *agenda* (make-semiring-ht))
   (setf *chart* (make-semiring-ht))
   
+  (setf *new-matches* (start-match-against-constructions *constructions*))
+  
   (let ((*print-debug* nil))
     (loop for new-match in *new-matches*
        do (add-to-ht *chart*

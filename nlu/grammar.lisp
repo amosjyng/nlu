@@ -379,8 +379,7 @@
    (= (:structured :ends-in-question-mark {action}) action))
   (new-indv nil {how query}))
 
-(defparameter *new-matches* (start-match-against-constructions *constructions*)
-  "List of new matches started from all constructions")
+(setup-new-parse)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;                  ;;;
@@ -401,9 +400,6 @@
 ;;;     LISPIFICATION     ;;;
 ;;;                       ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(defparameter *sentence-position* 0
-  "The position at which to start a new sentence")
 
 (defun lispify-pronoun (meaning)
   "Replace a pronoun meaning with first/second person (or actual object)"
