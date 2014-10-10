@@ -136,15 +136,16 @@
           (mapcar (lambda (modifier)
                     (new-is-a new-node (meaning-scone-element modifier)))
                   modifiers)
+          ;; always make sure it's not treated as an adjective
+          ;; otherwise it'll be an {entity modifier} because it IS-A various
+          ;; entity modifiers
+          (new-is-not-a new-node {entity modifier})
           (when ; we are referring to "an <object>"
               (and (not (null article))
                    (simple-is-x-a-y? (meaning-scone-element (first article))
                                      {indefinite article (grammatical entity)}))
             ;; then make this newly define object generic
-            (new-is-a new-node {generic entity})
-            ;; and make sure it is not treated as an adjective (because we created
-            ;; IS-A links to each of the adjectives, but this itself is not an adjective)
-            (new-is-not-a new-node {entity modifier})))
+            (new-is-a new-node {generic entity})))
         new-node)))
 
 (defconstruction subentity
