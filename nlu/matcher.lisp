@@ -53,19 +53,19 @@
    of a Scone element for a MEANING object")
 
 ;;; DEBUGGING PARAMETERS
-(defparameter *debug-ht-update* nil
+(defvar *debug-ht-update* nil
   "Print successful updates to the chart/agenda")
 
-(defparameter *debug-add-failures* nil
+(defvar *debug-add-failures* nil
   "Print failed adds to the chart/agenda")
 
-(defparameter *debug-con-creation* nil
+(defvar *debug-con-creation* nil
   "Print errors from completed matches that can't become matched constructions")
 
-(defparameter *debug-payload* nil
+(defvar *debug-payload* nil
   "Print relevant information about the payload while it is being created")
 
-(defparameter *debug-goal-discovery* nil
+(defvar *debug-goal-discovery* nil
   "Print all newly discovered potential goal values")
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1077,10 +1077,9 @@
   (remove-if #'null
              (loop for match in matches collect (continue-match match token))))
 
-(unless (boundp '*strings-to-concepts-hashmap*)
-  (defparameter *strings-to-concepts-hashmap* (make-hash-table :test #'equal)
-    "A hashmap with string tokens as keys and a list of associated Scone concepts
-     as values"))
+(defvar *strings-to-concepts-hashmap* (make-hash-table :test #'equal)
+  "A hashmap with string tokens as keys and a list of associated Scone concepts
+     as values")
 
 (defun str-ends-in-charp (str char)
   "See if a string ends in a certain character"
@@ -1130,9 +1129,8 @@
     (gethash (string-upcase (remove-punctuation str))
              *strings-to-concepts-hashmap*)))
 
-(unless (boundp '*constructions*)
-  (defparameter *constructions* nil
-    "List of all defined constructions"))
+(defvar *constructions* nil
+    "List of all defined constructions")
 
 (defparameter *new-matches* (start-match-against-constructions *constructions*)
   "List of new matches started from all constructions")
