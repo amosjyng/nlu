@@ -93,9 +93,11 @@
   (setup-new-parse))
 
 (defun debug-all ()
-  "Set all debug global variables to true
+  "Set all debug global variables to true, and make element names human-readable
 
    Only used for debugging"
+  (setf *generate-long-element-names* t)
+  
   (setf *debug-ht-update* t)
   (setf *debug-add-failures* t)
   (setf *debug-con-creation* t)
