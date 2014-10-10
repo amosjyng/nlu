@@ -1555,7 +1555,7 @@
           (simple-is-x-eq-y? (meaning-scone-element value) meaning)))
    (get-chart-values)))
 
-(defun cons-that-means (meaning)
+(defun con-that-means (meaning)
   "Gets only the first matched construction whose meaning is MEANING
 
    Useful when there's only one such matched construction. Used only for
