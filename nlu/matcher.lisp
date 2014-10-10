@@ -75,9 +75,15 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; should probably be in Scone instead
-(defun is-x-a-y-of-z? (x y z)
+(defun simple-is-x-a-y-of-z? (x y z)
   "See if element X is a role Y of element Z"
-  (member (lookup-element x) (list-all-x-of-y y z)))
+  (let ((x (lookup-element-test x))
+        (y (lookup-element-test y))
+        (z (lookup-element-test z)))
+    (with-markers (m)
+      (progn
+        (mark-role y z m :downscan t)
+        (marker-on? x m)))))
 
 (defmacro print-debug (statement &rest args)
   "Prints debugging STATEMENT out to user"

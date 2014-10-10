@@ -151,7 +151,7 @@
   ((= (:unstructured {entity}) bigger-entity)
    (= (:unstructured {entity}) entity))
   
-  (unless (is-x-a-y-of-z? (mse-f entity) {part} (mse-f bigger-entity))
+  (unless (simple-is-x-a-y-of-z? (mse-f entity) {part} (mse-f bigger-entity))
     (error "Subentity not part of entity"))
   
   (mse-f entity))
