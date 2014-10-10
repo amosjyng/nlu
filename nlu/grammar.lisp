@@ -5,8 +5,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; allow this file to be loaded multiple times
-(unless (handler-case (lookup-element-test {grammatical entity})
-          (simple-error () nil))
+(unless (lookup-element {grammatical entity})
   (new-type {grammatical entity} {thing})
   (new-eq {entity} {entity.n.01})
   (new-type {specific entity} {entity})
