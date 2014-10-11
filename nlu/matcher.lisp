@@ -25,7 +25,7 @@
 ;;; To profile on SBCL, run
 ;;; (require :sb-sprof)
 ;;; (sb-sprof:with-profiling (:show-progress t :loop t :report :graph)
-;;;  (nlu "Please pick up a large screwdriver and screw in the bolts."))
+;;;  (nlu "Please pick up a large red table leg and screw in the bolts."))
 
 ;;; TODO:
 ;;; Allow for parsing CSG's.
@@ -73,6 +73,8 @@
 ;;;     GENERAL UTILITY FUNCTIONS     ;;;
 ;;;                                   ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(base-context-marker-setup)
 
 ;; should probably be in Scone instead
 (defun simple-is-x-a-y-of-z? (x y z)
@@ -758,7 +760,7 @@
         (let ((new-context
                (new-context nil
                             (cons *context* (component-contexts new-match)))))
-          (in-context new-context)
+          (change-context new-context)
           (when *debug-payload*
             (print-debug "[PAYLOAD] Creating construction for match ~S"
                          new-match)
@@ -868,9 +870,9 @@
   "See if the Scone node associated with ACTUAL-TOKEN IS-A EXPECTED-TOKEN"
   (let ((original-context *context*)
         (meaning (meaning-scone-element actual-token)))
-    (in-context (context-of actual-token))
+    (change-context (context-of actual-token))
     (let ((result (matches? meaning expected-token)))
-      (in-context original-context)
+      (change-context original-context)
       result)))
 
 (defmethod matches? ((actual-token matched-construction)
@@ -1067,7 +1069,7 @@
                          (get-last-match-component new-match))
                         :scone-element (run-payload new-match))))
     (setf (context-of matched-construction) *context*)
-    (in-context *last-parse-context*)
+    (change-context *last-parse-context*)
     matched-construction))
 
 (defun start-match-against-construction (construction)
@@ -1160,7 +1162,7 @@
    question posed by *QUESTION*. *ANSWER* global variable may be set
    to NIL if no answer exists or is unknown."
   (let ((se (meaning-scone-element *question*)))
-    (in-context *last-parse-context*)
+    (change-context *last-parse-context*)
     (cond ((simple-is-x-a-y? se {is-a query})
            (setf *answer*
                  (is-x-a-y? (get-mse 'first-thing  *question*)
@@ -1466,7 +1468,7 @@
 
 (defun setup-new-parse ()
   "Reset everything for a fresh parse"
-  (in-context {general})
+  (change-context {general})
 
   (setf *sentence-position* 0)
   (setf *goal-span* nil)
@@ -1530,7 +1532,7 @@
             (setf *last-parse-context* (context-of goal-value))
             (setf *question* nil)
             (setf *answer* nil)))))
-    (in-context *last-parse-context*)
+    (change-context *last-parse-context*)
     goal-value))
 
 (defun get-goal-value ()
