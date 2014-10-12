@@ -56,6 +56,9 @@
 (defvar *debug-ht-update* nil
   "Print successful updates to the chart/agenda")
 
+(defvar *debug-isa-caching* nil
+  "Print reads and updates to the *ISA-CACHE*")
+
 (defvar *debug-add-failures* nil
   "Print failed adds to the chart/agenda")
 
@@ -107,6 +110,7 @@
   (setf *generate-long-element-names* t)
   
   (setf *debug-ht-update* t)
+  (setf *debug-isa-caching* t)
   (setf *debug-add-failures* t)
   (setf *debug-con-creation* t)
   (setf *debug-payload* t)
@@ -849,6 +853,12 @@
 ;;;                                    ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(defun get-hash-str (e1 e2 c)
+  "Return a hashable string for an IS-A query in a certain context"
+  (format nil "~A{~A}~A|" (iname e1) (iname e2) (iname c)))
+
+(defparameter *isa-cache* (make-hash-table))
+
 (defgeneric matches? (actual-token expected-token)
   (:documentation
    "Sees if the ACTUAL-TOKEN satisfies the specification of the 
@@ -867,12 +877,31 @@
 (defmethod matches? ((actual-token matched-construction)
                      (expected-token structure-object))
   "See if the Scone node associated with ACTUAL-TOKEN IS-A EXPECTED-TOKEN"
-  (let ((original-context *context*)
-        (meaning (meaning-scone-element actual-token)))
-    (change-context (context-of actual-token))
-    (let ((result (matches? meaning expected-token)))
-      (change-context original-context)
-      result)))
+  (let* ((original-context *context*)
+         (meaning (meaning-scone-element actual-token))
+         (str
+          (if (listp meaning)
+              (apply #'concatenate 'string
+                     (mapcar (lambda (mse)
+                               (get-hash-str mse expected-token
+                                             (context-of actual-token)))
+                             meaning))
+              (get-hash-str meaning expected-token (context-of actual-token))))
+         (key (sxhash str)))
+    (multiple-value-bind (result present) (gethash key *isa-cache*)
+      (if present
+          (progn
+            (when *debug-isa-caching*
+              (print-debug "Using cached result for ~S" str))
+            result) ; return result without doing expensive context change
+          (progn
+            (change-context (context-of actual-token))
+            (let ((result (matches? meaning expected-token)))
+              (change-context original-context)
+              (when *debug-isa-caching*
+                (print-debug "Adding cached result for ~S to be ~S" str result))
+              (setf (gethash key *isa-cache*) result)
+              result))))))
 
 (defmethod matches? ((actual-token matched-construction)
                      (expected-token symbol))
@@ -1474,6 +1503,7 @@
   (setf *chart* (make-semiring-ht))
   
   (setf *new-matches* (start-match-against-constructions *constructions*))
+  (setf *isa-cache* (make-hash-table))
   
   (let ((*debug-ht-update* nil))
     (loop for new-match in *new-matches*
