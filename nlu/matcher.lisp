@@ -757,15 +757,14 @@
       ;; bind variables in matched-construction components to their values, and
       ;; then evaluate payload code
       (progn
-        (let ((new-context
-               (new-context nil
-                            (cons *context* (component-contexts new-match)))))
+        (let ((parent-contexts (cons *context* (component-contexts new-match)))
+              (new-context (new-context nil parent-contexts)))
           (change-context new-context)
           (when *debug-payload*
             (print-debug "[PAYLOAD] Creating construction for match ~S"
                          new-match)
             (print-debug "[PAYLOAD] Creating new context ~S from contexts ~S"
-                         new-context (component-contexts new-match))))
+                         new-context parent-contexts)))
         ;; let the calling function restore the previous context
         (when *debug-payload*
           (print-debug "[PAYLOAD] Calling payload with arguments ~S"
