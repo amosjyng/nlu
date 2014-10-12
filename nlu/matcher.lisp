@@ -1423,13 +1423,12 @@
              (setf (gethash span *chart*)
                    incomplete))))
         ((and (typep span 'meaning-span)
-              *goal-span* ; in case this is null during development
-              (data-equalp (get-span-range span) (get-span-range *goal-span*))
-              (matched-constructionp (get-ht-value *chart* span)))
-         (when *debug-goal-discovery*
-           (print-debug "[GOAL] Found new valid parse ~S"
-                        (get-ht-value *chart* span)))
-         (add-to-ht *agenda* *goal-span* (get-ht-value *chart* span)))))
+              (data-equalp (get-span-range span) (get-span-range *goal-span*)))
+         (progn
+           (when *debug-goal-discovery*
+             (print-debug "[GOAL] Found new valid parse ~S"
+                          (get-ht-value *chart* span)))
+           (add-to-ht *chart* *goal-span* (get-ht-value *chart* span))))))
 
 (defun process-agenda-item (agenda-item)
   "Put agenda item into chart and see if it can produce any new consequents with
