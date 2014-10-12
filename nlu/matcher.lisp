@@ -757,8 +757,8 @@
       ;; bind variables in matched-construction components to their values, and
       ;; then evaluate payload code
       (progn
-        (let ((parent-contexts (cons *context* (component-contexts new-match)))
-              (new-context (new-context nil parent-contexts)))
+        (let* ((parent-contexts (cons *context* (component-contexts new-match)))
+               (new-context (new-context nil parent-contexts)))
           (change-context new-context)
           (when *debug-payload*
             (print-debug "[PAYLOAD] Creating construction for match ~S"
@@ -1520,7 +1520,7 @@
              (setf start-position (1+ start-position))))
   ;; parse completed, now perform actions using parse result
   (let ((goal-value (get-ht-value *chart* *goal-span*)))
-    (when goal-value
+    (when (matched-constructionp goal-value)
       (let ((se (meaning-scone-element goal-value)))
         (if (matches? se {query})
             (progn
