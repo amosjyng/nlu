@@ -857,7 +857,18 @@
   "Return a hashable string for an IS-A query in a certain context"
   (format nil "~A{~A}~A|" (iname e1) (iname e2) (iname c)))
 
-(defparameter *isa-cache* (make-hash-table))
+(defparameter *isa-cache* (make-hash-table)
+  "Because changing contexts is expensive, cache repeated IS-A queries in the
+   same context")
+
+(defparameter *isa-cache-writes* 0)
+(defparameter *isa-cache-reads* 0)
+
+(defun isa-cache-stats ()
+  "Print how often the *ISA-CACHE* is actually used, to give a better idea of
+   whether a change to caching helps or not"
+  (format t "~A writes to cache, ~A reads from cache"
+          *isa-cache-writes* *isa-cache-reads*))
 
 (defgeneric matches? (actual-token expected-token)
   (:documentation
@@ -892,6 +903,7 @@
       (if present
           (progn
             (when *debug-isa-caching*
+              (incf *isa-cache-reads*)
               (print-debug "Using cached result for ~S" str))
             result) ; return result without doing expensive context change
           (progn
@@ -899,6 +911,7 @@
             (let ((result (matches? meaning expected-token)))
               (change-context original-context)
               (when *debug-isa-caching*
+                (incf *isa-cache-writes*)
                 (print-debug "Adding cached result for ~S to be ~S" str result))
               (setf (gethash key *isa-cache*) result)
               result))))))
@@ -1499,6 +1512,8 @@
   
   (setf *new-matches* (start-match-against-constructions *constructions*))
   (setf *isa-cache* (make-hash-table))
+  (setf *isa-cache-writes* 0)
+  (setf *isa-cache-reads* 0)
   
   (let ((*debug-ht-update* nil))
     (loop for new-match in *new-matches*
