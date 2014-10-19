@@ -1115,10 +1115,6 @@
   (remove-if #'null
              (loop for match in matches collect (continue-match match token))))
 
-(defvar *strings-to-concepts-hashmap* (make-hash-table :test #'equal)
-  "A hashmap with string tokens as keys and a list of associated Scone concepts
-     as values")
-
 (defun str-ends-in-charp (str char)
   "See if a string ends in a certain character"
   (eq char (aref str (1- (length str)))))
@@ -1164,8 +1160,7 @@
 (defun get-string-concepts (str)
   "Get all Scone concepts associated with a particular string"
   (when str ; if STR is NIL, return NIL as well
-    (gethash (string-upcase (remove-punctuation str))
-             *strings-to-concepts-hashmap*)))
+    (mapcar #'first (lookup-definitions (remove-punctuation str)))))
 
 (defvar *constructions* nil
     "List of all defined constructions")

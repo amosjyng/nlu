@@ -389,11 +389,6 @@
 ;;; set custom weights for words
 (load "nlu/weights")
 
-;;; Create a hashmap from strings to Scone concepts
-(maphash (lambda (k v)
-	   (setf (gethash k *strings-to-concepts-hashmap*) (mapcar #'car v)))
-	 *english-dictionary*)
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;                       ;;;
 ;;;     LISPIFICATION     ;;;
