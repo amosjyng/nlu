@@ -431,11 +431,15 @@
 		      (o-list (list o-list))
 		      (r-list (list r-list)))))))
 
-(defun lispify-entity (matched-construction)
-  "Turn a matched construction representing an {entity} into a list"
-  (let* ((article (get-mse 'article matched-construction))
-	 (modifiers (get-mses 'modifiers matched-construction))
-	 (entity (get-first-component 'entity matched-construction))
+(defun lispify-entity (meaning)
+  "Turn a meaning representing an {entity} into a list"
+  (let* ((article (and (matched-constructionp meaning)
+                       (get-mse 'article meaning)))
+	 (modifiers (and (matched-constructionp meaning)
+                         (get-mses 'modifiers meaning)))
+	 (entity (if (matched-constructionp meaning)
+                      (get-first-component 'entity meaning)
+                      meaning))
 	 (article-keyword
 	  (if (and article
 		   (simple-is-x-a-y? article
@@ -478,9 +482,6 @@
   (when goal-value
     (cond ((listp (meaning-scone-element goal-value))
 	   (mapcar #'lispify (meaning-scone-element goal-value)))
-          ((and (not (matched-constructionp goal-value))
-                (meaningp goal-value))
-           (meaning-scone-element goal-value))
 	  ((simple-is-x-a-y? (meaning-scone-element goal-value)
 			     {pronoun})
 	   (lispify-pronoun goal-value))
