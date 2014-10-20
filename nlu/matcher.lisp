@@ -1177,10 +1177,11 @@
                 (equal "s" (subseq str (- end-pos 1) end-pos)))
            (subseq str 0 (- end-pos 1))))))
 
-(defun get-string-concepts (str)
+(defun get-string-concepts (str &optional (syntax-tag :other))
   "Get all Scone concepts associated with a particular string"
   (when str ; if STR is NIL, return NIL as well
-    (mapcar #'first (lookup-definitions (remove-punctuation str)))))
+    (mapcar #'first
+            (lookup-definitions (remove-punctuation str) (list syntax-tag)))))
 
 (defvar *constructions* nil
     "List of all defined constructions")
@@ -1498,11 +1499,11 @@
                (when (both-antecedents-satisfied? agenda-item chart-item)
                  (combine-antecedents agenda-item chart-item)))))))
 
-(defun exact-meanings (word position attributes)
+(defun exact-meanings (word position attributes &optional (syntax-tag :other))
   "Retrieve a list of all meanings associated with this exact sttring. All
    meanings in this list will have the same attributes (e.g. all will be
    considered plural, or end in periods, etc.)"
-  (loop for concept in (get-string-concepts word)
+  (loop for concept in (get-string-concepts word syntax-tag)
        collect (apply #'define-meaning concept
                       position (1+ position)
                       (append
@@ -1528,7 +1529,8 @@
                              (append (list :plural nil) punctuation-attrs))
              ;; append base form of plural word
              (exact-meanings (plural-base cleaned-word) position
-                             (append (list :plural t) punctuation-attrs)))))
+                             (append (list :plural t) punctuation-attrs)
+                             :noun))))
 
 (defun setup-new-parse ()
   "Reset everything for a fresh parse"
