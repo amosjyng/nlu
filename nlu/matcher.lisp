@@ -1547,6 +1547,10 @@
      do (loop for key being the hash-keys of *agenda*
            do (process-agenda-item key))))
 
+(defun get-goal-value ()
+  "Get the result of the latest parse"
+  (get-ht-value *chart* *goal-span*))
+
 (defun semiring-parse (word-list start-position)
   "Run the semiring parsing algorithm on a sentence until the agenda is empty"
   ;; set what we want to get as a parse result
@@ -1559,7 +1563,7 @@
              (parse-word word start-position)
              (setf start-position (1+ start-position))))
   ;; parse completed, now perform actions using parse result
-  (let ((goal-value (get-ht-value *chart* *goal-span*)))
+  (let ((goal-value (get-goal-value)))
     (when (matched-constructionp goal-value)
       (let ((se (meaning-scone-element goal-value)))
         (if (matches? se {query})
@@ -1572,12 +1576,6 @@
             (setf *answer* nil)))))
     (change-context *last-parse-context*)
     goal-value))
-
-(defun get-goal-value ()
-  "Get the result of the latest parse
-
-   Used only for debugging"
-  (get-ht-value *chart* *goal-span*))
 
 (defun get-agenda-values ()
   "Get all values from the agenda

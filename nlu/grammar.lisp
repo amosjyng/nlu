@@ -474,9 +474,12 @@
 
 (defun lispify (goal-value)
   "Turn a matched construction into a Lisp list"
-  (when (and goal-value (matched-constructionp goal-value))
+  (when goal-value
     (cond ((listp (meaning-scone-element goal-value))
 	   (mapcar #'lispify (meaning-scone-element goal-value)))
+          ((and (not (matched-constructionp goal-value))
+                (meaningp goal-value))
+           (meaning-scone-element goal-value))
 	  ((simple-is-x-a-y? (meaning-scone-element goal-value)
 			     {pronoun})
 	   (lispify-pronoun goal-value))
