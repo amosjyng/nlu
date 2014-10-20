@@ -25,8 +25,11 @@
   (new-type {he} {pronoun})
   (new-type {she} {pronoun})
   (new-type {we} {pronoun})
-  (new-indv {first person} {first_person.n.01})
-  (new-indv {second person} {second_person.n.01})
+  (new-eq {first person} {first_person.n.01})
+  (new-eq {second person} {second_person.n.01})
+  (new-eq {I}   {first person})
+  (new-eq {me}  {first person})
+  (new-eq {you} {second person})
 
   (new-eq {physical_entity.n.01} {tangible})
 
