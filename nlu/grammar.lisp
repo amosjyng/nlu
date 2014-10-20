@@ -64,8 +64,6 @@
   (english {kick.v.01} :verb "kicks")
   (english {kick.v.01} :verb "kicked")
   (english {kick.v.01} :verb "kicking")
-  (english {animal} :noun "animals")
-  (english {bolt.n.06} :noun "bolts")
   (english {hammer.v.01} :verb "hammered")
 
   (new-relation {command}

@@ -496,11 +496,8 @@
   (make-instance 'range :start start-pos :end (+ start-pos length)))
 
 (defun define-meaning (scone-element start end
-                                     plural
-                                     ends-in-comma
-                                     ends-in-period
-                                     ends-in-question-mark
-                                     &optional (score 1))
+                       &key plural ends-in-comma ends-in-period
+                         ends-in-question-mark score)
   "Utility function for creating a MEANING object from a SCONE-ELEMENT spanning
    a certain RANGE in a sentence"
   (make-instance 'meaning :scone-element scone-element
@@ -1170,6 +1167,16 @@
   "See if a string (possibly) represents a plural noun"
   (str-ends-in-charp (remove-punctuation str) #\s))
 
+(defun plural-base (str)
+  "Convert a plural string to its base form"
+  (let ((end-pos (length str)))
+    (cond ((and (> end-pos 2)
+                (equal "es" (subseq str (- end-pos 2) end-pos)))
+           (subseq str 0 (- end-pos 2)))
+          ((and (> end-pos 1)
+                (equal "s" (subseq str (- end-pos 1) end-pos)))
+           (subseq str 0 (- end-pos 1))))))
+
 (defun get-string-concepts (str)
   "Get all Scone concepts associated with a particular string"
   (when str ; if STR is NIL, return NIL as well
@@ -1491,15 +1498,37 @@
                (when (both-antecedents-satisfied? agenda-item chart-item)
                  (combine-antecedents agenda-item chart-item)))))))
 
-(defun get-string-meanings (word position)
-  "Retrieve a list of all meanings associated with a particular string"
+(defun exact-meanings (word position attributes)
+  "Retrieve a list of all meanings associated with this exact sttring. All
+   meanings in this list will have the same attributes (e.g. all will be
+   considered plural, or end in periods, etc.)"
   (loop for concept in (get-string-concepts word)
-       collect (define-meaning concept position (1+ position)
-                 (str-pluralp word)
-                 (str-ends-in-commap word)
-                 (str-ends-in-periodp word)
-                 (str-ends-in-question-markp word)
-                 (or (get-element-property concept :score) 1))))
+       collect (apply #'define-meaning concept
+                      position (1+ position)
+                      (append
+                       (list :score (or (get-element-property concept :score)
+                                        1))
+                       attributes))))
+
+(defun get-string-meanings (word position)
+  "Retrieve a list of all meanings associated with all morphological forms of a
+   given string (i.e. given the string 'deer' it will return both the singular
+   and plural meanings of 'deer')"
+  (let ((punctuation-attrs
+         (list :ends-in-comma (str-ends-in-commap word)
+               :ends-in-period (str-ends-in-periodp word)
+               :ends-in-question-mark (str-ends-in-question-markp word)))
+        (cleaned-word (remove-punctuation word)))
+    (funcall #'append ; append word as-is (in case punctuation part of word)
+             (exact-meanings word position
+                             (list :plural nil :ends-in-comma nil
+                                   :ends-in-period nil
+                                   :ends-in-question-mark nil))
+             (exact-meanings cleaned-word position ; append word w/o punctuation
+                             (append (list :plural nil) punctuation-attrs))
+             ;; append base form of plural word
+             (exact-meanings (plural-base cleaned-word) position
+                             (append (list :plural t) punctuation-attrs)))))
 
 (defun setup-new-parse ()
   "Reset everything for a fresh parse"
@@ -1525,14 +1554,10 @@
   "Add all meanings of a given string (including the raw string itself) to the
    agenda"
   (loop for concept in
-       (nconc (list (define-meaning (remove-punctuation new-word)
-                      position
-                      (1+ position)
-                      (str-pluralp new-word)
-                      (str-ends-in-commap new-word)
-                      (str-ends-in-periodp new-word)
-                      (str-ends-in-question-markp new-word)
-                      (- 1 *string-as-concept-penalty*)))
+       (nconc (list (define-meaning new-word position (1+ position)
+                      :plural nil :ends-in-comma nil :ends-in-period nil
+                      :ends-in-question-mark nil
+                      :score (- 1 *string-as-concept-penalty*)))
               (get-string-meanings new-word position))
      do (add-to-ht *agenda*
                    (get-meaning-key concept)
