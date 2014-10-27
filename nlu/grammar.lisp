@@ -83,6 +83,70 @@
   "Get the first meaning's scone element out of a list of meanings"
   (meaning-scone-element (first meanings)))
 
+;;;;;;;;;;;;;;;;;;;;;;;
+;;;                 ;;;
+;;;   ATTRIBUTES    ;;;
+;;;                 ;;;
+;;;;;;;;;;;;;;;;;;;;;;;
+
+(defparameter *attribute-detection* nil)
+(defparameter *attribute-removal* nil)
+(defparameter *attribute-combination* nil)
+
+(defun str-ends-in-charp (str char)
+  "See if a string ends in a certain character"
+  (eq char (aref str (1- (length str)))))
+
+(defun remove-char (str char)
+  "If STR has CHAR at the end, remove it"
+  (if (str-ends-in-charp str char)
+      (subseq str 0 (1- (length str)))
+    str))
+
+(defmacro defpunctuation-attr (attr punctuation-symbol)
+  `(defattr ,attr
+       ;; how do we detect it?
+       (lambda (word) (str-ends-in-charp word ,punctuation-symbol))
+     ;; how do we remove it?
+     (lambda (word) (remove-char word ,punctuation-symbol))
+     ;; how do we detect it in a newly finished match?
+     (lambda (match) (attr? ,attr (get-last-match-component match)))))
+
+(defpunctuation-attr :ends-in-comma #\,)
+(defpunctuation-attr :ends-in-. #\.)
+(defpunctuation-attr :ends-in-? #\?)
+
+(defattr :plural
+    ;; how do we detect it?
+    (lambda (word) (str-ends-in-charp word #\s))
+  ;; how do we remove it?
+  (lambda (word)
+    (let ((end-pos (length word)))
+      (cond ((and (> end-pos 2)
+                  (equal "es" (subseq word (- end-pos 2) end-pos)))
+             (subseq word 0 (- end-pos 2)))
+            ((and (> end-pos 1)
+                  (equal "s" (subseq word (- end-pos 1) end-pos)))
+             (subseq word 0 (- end-pos 1))))))
+  
+  ;; how do we detect it in a newly finished match?
+  (lambda (match)
+    (let ((entity (first (gethash 'entity (match-so-far match)))))
+      (when entity (attr? :plural entity)))))
+
+(defun get-string-meanings (word position)
+  "Retrieve a list of all meanings associated with all morphological forms of a
+   given string (i.e. given the string 'deer' it will return both the singular
+   and plural meanings of 'deer')"
+  (let ((attrs nil))
+    (funcall #'append
+             (exact-meanings word position attrs)
+             (with-attrs (:ends-in-comma :ends-in-. :ends-in-?)
+               (funcall #'append
+                        (exact-meanings word position attrs)
+                        (when-attr :plural
+                          (exact-meanings word position attrs :noun)))))))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;                    ;;;
 ;;;   CONSTRUCTIONS    ;;;
@@ -244,7 +308,7 @@
     (new-indv nil {action clause (grammatical entity)}))
 
 (defconstruction sentence
-  ((= (:ends-in-period :atom {clause (grammatical entity)}) clause))
+  ((= (:ends-in-. :atom {clause (grammatical entity)}) clause))
   
   (new-indv nil {sentence (grammatical entity)}))
 (setf (construction-score-multiplier sentence) 1.1)
@@ -364,19 +428,19 @@
    (= {article (grammatical entity)} discard)
    (= nil first-thing)
    (= {indefinite article (grammatical entity)} discard)
-   (= :ends-in-question-mark second-thing))
+   (= :ends-in-? second-thing))
   (new-indv nil {is-a query}))
 
 (defconstruction why-query
   ((= "why" discard) (? "exactly" discard) (= "was" discard)
    (= (:structured {entity}) object)
-   (= (:structured :ends-in-question-mark {action}) action))
+   (= (:structured :ends-in-? {action}) action))
   (new-indv nil {why query}))
 
 (defconstruction how-query
   ((= "how" discard) (? "exactly" discard) (= "was" discard)
    (= (:structured {entity}) object)
-   (= (:structured :ends-in-question-mark {action}) action))
+   (= (:structured :ends-in-? {action}) action))
   (new-indv nil {how query}))
 
 (setup-new-parse)
@@ -451,7 +515,7 @@
 	      (list (meaning-scone-element entity)
 		    (cons :attributes modifiers))
 	    (list (meaning-scone-element entity)))))
-    (if (pluralp entity)
+    (if (attr? :plural entity)
 	(list article-keyword
 	      (cons :multiple entity-list))
       (cons article-keyword

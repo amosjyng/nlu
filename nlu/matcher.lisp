@@ -183,35 +183,16 @@
     :initarg :score
     :initform 1
     :reader get-meaning-score)
-   (plural ; todo: make constructions plural too
+   (attributes
     :documentation
-    "See whether this word matches a plural word. Might be true for verbs as well,
-     but if it's a verb just ignore this field as it is meaningless."
-    :type boolean
-    :initarg :plural
-    :initform nil
-    :reader pluralp)
-   (ends-in-comma
-    :documentation
-    "Whether or not the text for this meaning ends in a comma"
-    :type boolean
-    :initarg :ends-in-comma
-    :initform nil
-    :reader ends-in-commap)
-   (ends-in-period
-    :documentation
-    "Whether or not the text for this meaning ends in a period"
-    :type boolean
-    :initarg :ends-in-period
-    :initform nil
-    :reader ends-in-periodp)
-   (ends-in-question-mark
-    :documentation
-    "Whether or not the text for this meaning ends in a question mark"
-    :type boolean
-    :initarg :ends-in-question-mark
-    :initform nil
-    :reader ends-in-question-markp))
+    "A list of various semantic (such as whether or not this meaning is plural)
+     and syntactic (such as whether the string for this meaning ends with a
+     period) attributes for this meaning"
+    :type list
+    :initarg :attributes
+    :initform (error "You MUST provide attributes for this meaning, even if it's
+                      just NIL!")
+    :accessor meaning-attributes))
   (:documentation
    "Wrapper for a Scone element. Eventually this is intended to
     store extra information about this meaning, such as the language or part of
@@ -352,6 +333,91 @@
 
 (ql:quickload "alexandria")
 
+(defvar *attribute-detection* nil
+  "Assoc list of functions to check whether a string contains certain
+   morphological attributes")
+
+(defvar *attribute-removal* nil
+  "Assoc list of functions to obtain the base form of a string without the
+   particular morphological attribute")
+
+(defvar *attribute-combination* nil
+  "Assoc list of functions to return whether or not combination of elements with
+   and without this attribute also results in a matched construction with this
+   attribute")
+
+(defmacro defattr (attr detection-func removal-func combination-func)
+  "Macro that adds the detection and removal functions for an attribute to the
+   corresponding assoc lists"
+  `(progn
+     (setf *attribute-detection*
+           (acons ,attr ,detection-func *attribute-detection*))
+     (setf *attribute-removal*
+           (acons ,attr ,removal-func *attribute-removal*))
+     (setf *attribute-combination*
+           (acons ,attr ,combination-func *attribute-combination*))))
+
+(defgeneric attr? (attr token)
+  (:documentation "Check if a token contains a certain attribute"))
+
+(defmethod attr? (attr (token string))
+  "Check if a word contains a certain attribute"
+  (funcall (cdr (assoc attr *attribute-detection*)) token))
+
+(defmethod attr? (attr (token match))
+  "Check if a match contains a certain attribute"
+  (funcall (cdr (assoc attr *attribute-combination*)) token))
+
+(defmethod attr? (attr (token meaning))
+  "Check if a meaning contains a certain attribute"
+  (member attr (meaning-attributes token)))
+
+(defun remove-attr (attr word)
+  "Remove an attribute from a word"
+  (funcall (cdr (assoc attr *attribute-removal*)) word))
+
+(defmacro if-attr (attr true-statement false-statement)
+  "If WORD has ATTR, redefine ATTRS to include ATTR and redefine WORD to have
+   ATTR removed, and execute TRUE-STATEMENT. Otherwise leave ATTRS and WORD
+   as-is and execute FALSE-STATEMENT"
+  `(if (attr? ,attr word)
+       (let ((word (remove-attr ,attr word))
+             (attrs (cons ,attr attrs)))
+         ,true-statement)
+       ,false-statement))
+
+(defmacro when-attr (attr &body body)
+  "If WORD has ATTR, refedine ATTRS to include ATTR and redefine WORD to have
+   ATTR removed, and execute BODY. Otherwise do nothing."
+  `(if-attr ,attr
+            ,(cons 'progn body)
+            nil))
+
+(defun collect-attrs (attrs remaining-attrs word)
+  "Returns the word after adding all attrs in REMAINING-ATTRS that the word
+   contains"
+  (if (null remaining-attrs)
+      (list attrs word)
+      (let ((next-attr (first remaining-attrs)))
+        (if-attr next-attr
+                 ;; ATTRS and WORD will be redefined, so don't worry
+                 (collect-attrs attrs (rest remaining-attrs) word)
+                 (collect-attrs attrs (rest remaining-attrs) word)))))
+
+(defun collect-match-attrs (word)
+  "See which attributes a match contains"
+  (loop for attr-pair in *attribute-combination*
+     if (attr? (first attr-pair) word)
+     collect (first attr-pair)))
+
+(defmacro with-attrs (new-attrs &body body)
+  "Macro for adding a new list of attributes (if they exist) to the ATTRS list
+   and removing said attributes from the word"
+  `(let* ((attr-results (collect-attrs attrs ',new-attrs word))
+          (attrs (first attr-results))
+          (word (second attr-results)))
+     ,@body))
+
 (defun change-operator (new-operator element)
   "Change the operator of an element of a pattern. ELEMENT is assumed to be a
    list"
@@ -414,7 +480,8 @@
 
 (defmethod data-equalp ((data1 meaning) (data2 meaning))
   "Comparison function for two MEANING objects"
-  (data-equalp (meaning-scone-element data1) (meaning-scone-element data2)))
+  (and (data-equalp (meaning-scone-element data1) (meaning-scone-element data2))
+       (equal (meaning-attributes data1) (meaning-attributes data2))))
 
 (defmethod data-equalp ((data1 match) (data2 match))
   "See if two matches are equal"
@@ -495,18 +562,12 @@
    position and length."
   (make-instance 'range :start start-pos :end (+ start-pos length)))
 
-(defun define-meaning (scone-element start end
-                       &key plural ends-in-comma ends-in-period
-                         ends-in-question-mark score)
+(defun define-meaning (scone-element start end attributes score)
   "Utility function for creating a MEANING object from a SCONE-ELEMENT spanning
    a certain RANGE in a sentence"
   (make-instance 'meaning :scone-element scone-element
                  :start start :end end
-                 :plural plural
-                 :ends-in-comma ends-in-comma
-                 :ends-in-period ends-in-period
-                 :ends-in-question-mark ends-in-question-mark
-                 :score score))
+                 :attributes attributes :score score))
 
 (defmacro defconstruction (construction-name elements &rest payload)
   "Utility macro for defining new constructions and adding them to the global
@@ -628,9 +689,10 @@
 
 (defmethod print-object ((object matched-construction) stream)
   "Show the parse tree of a MATCHED-CONSTRUCTION when printing it to a stream"
-  (format stream "<~S=~S ~a SCORE=~,2f>"
+  (format stream "<~S=~S ~a~%            ~S SCORE=~,2f>"
           (meaning-scone-element object) (lispify object)
-          (get-range-string object) (get-meaning-score object)))
+          (get-range-string object) (meaning-attributes object)
+          (get-meaning-score object)))
 
 (defmethod print-object ((object range) stream)
   "Show the start and end positions of a RANGE when printing it to a stream"
@@ -638,9 +700,9 @@
 
 (defmethod print-object ((object meaning) stream)
   "Shows which Scone node a MEANING is attached to when printing to a stream"
-  (format stream "<~S ~a SCORE=~,2f>"
+  (format stream "<~S ~a ~S SCORE=~,2f>"
           (meaning-scone-element object) (get-range-string object)
-          (get-meaning-score object)))
+          (meaning-attributes object) (get-meaning-score object)))
 
 (defun copy-range (range)
   "Create a copy of a RANGE object."
@@ -816,7 +878,7 @@
 
 (defun get-mse (component-name construction)
   "Extract Scone element representing the first element in a certain
-   component of a construction"
+   component of a matched construction"
   (let ((first-component (get-first-component component-name construction)))
     (when first-component
       (meaning-scone-element first-component))))
@@ -842,6 +904,16 @@
         do (loop for comp in comp-list
                  when (eq (end-of match) (end-of comp))
                  do (return-from outer comp))))
+
+(defun get-attr (attr meaning)
+  "Get an attribute (if it exists) from the attributes of a meaning"
+  (member attr (meaning-attributes meaning)))
+
+(defun set-attr (attr meaning new-val)
+  "set an attribute to a certain value for a meaning"
+  (when new-val ; no need to remove attributes for now
+    (setf (meaning-attributes meaning)
+          (cons attr (meaning-attributes meaning)))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -921,16 +993,11 @@
          (atom (meaning-scone-element actual-token)))
         ((eq expected-token :list)
          (listp (meaning-scone-element actual-token)))
-        ((eq expected-token :plural)
-         (pluralp actual-token))
-        ((eq expected-token :ends-in-comma)
-         (ends-in-commap actual-token))
-        ((eq expected-token :ends-in-period)
-         (ends-in-periodp actual-token))
-        ((eq expected-token :ends-in-question-mark)
-         (ends-in-question-markp actual-token))
         ((eq expected-token :structured)
-         t)))
+         t)
+        ;; e.g. EXPECTED-TOKEN is :PLURAL and ACTUAL-TOKEN represents a plural
+        ;; entity
+        (t (get-attr expected-token actual-token))))
 
 (defmethod matches? ((actual-token meaning) (expected-token structure-object))
   "See if the Scone node associated with ACTUAL-TOKEN IS-A EXPECTED-TOKEN"
@@ -939,16 +1006,11 @@
 (defmethod matches? ((actual-token meaning) (expected-token symbol))
   "See if the meaning object matches some condition specified by
    EXPECTED-TOKEN"
-  (cond ((eq expected-token :plural)
-         (pluralp actual-token))
-        ((eq expected-token :ends-in-comma)
-         (ends-in-commap actual-token))
-        ((eq expected-token :ends-in-period)
-         (ends-in-periodp actual-token))
-        ((eq expected-token :ends-in-question-mark)
-         (ends-in-question-markp actual-token))
-        ((eq expected-token :unstructured)
-         t)))
+  (cond ((eq expected-token :unstructured)
+         t)
+        ;; e.g. EXPECTED-TOKEN is :PLURAL and ACTUAL-TOKEN represents a plural
+        ;; entity
+        (t (get-attr expected-token actual-token))))
 
 (defmethod matches? ((actual-token t) (expected-token symbol))
   "See if ACTUAL-TOKEN matches some condition specified by
@@ -1093,18 +1155,10 @@
                         :start (start-of new-match)
                         :end (end-of new-match)
                         :components (match-so-far new-match)
+                        :attributes (collect-match-attrs new-match)
                         :score (* (match-score new-match)
                                   (construction-score-multiplier
                                    (get-match-construction new-match)))
-                        :ends-in-comma
-                        (ends-in-commap
-                         (get-last-match-component new-match))
-                        :ends-in-period
-                        (ends-in-periodp
-                         (get-last-match-component new-match))
-                        :ends-in-question-mark
-                        (ends-in-question-markp
-                         (get-last-match-component new-match))
                         :scone-element (run-payload new-match))))
     (setf (context-of matched-construction) *context*)
     (change-context *last-parse-context*)
@@ -1125,63 +1179,11 @@
   (remove-if #'null
              (loop for match in matches collect (continue-match match token))))
 
-(defun str-ends-in-charp (str char)
-  "See if a string ends in a certain character"
-  (eq char (aref str (1- (length str)))))
-
-(defun str-ends-in-commap (str)
-  "See if a string ends in a comma"
-  (str-ends-in-charp str #\,))
-
-(defun str-ends-in-periodp (str)
-  "See if a string ends in a period"
-  (str-ends-in-charp str #\.))
-
-(defun str-ends-in-question-markp (str)
-  "See if a string ends in a question mark"
-  (str-ends-in-charp str #\?))
-
-(defun remove-char (str char)
-  "If STR has CHAR at the end, remove it"
-  (if (str-ends-in-charp str char)
-      (subseq str 0 (1- (length str)))
-    str))
-
-(defun remove-comma (str)
-  "If STR has a comma at the end, remove it"
-  (remove-char str #\,))
-
-(defun remove-period (str)
-  "If STR has a period at the end, remove it"
-  (remove-char str #\.))
-
-(defun remove-question-mark (str)
-  "If STR has a question mark at the end, remove it"
-  (remove-char str #\?))
-
-(defun remove-punctuation (str)
-  "Remove question marks and commas from end of STR"
-  (remove-period (remove-question-mark (remove-comma str))))
-
-(defun str-pluralp (str)
-  "See if a string (possibly) represents a plural noun"
-  (str-ends-in-charp (remove-punctuation str) #\s))
-
-(defun plural-base (str)
-  "Convert a plural string to its base form"
-  (let ((end-pos (length str)))
-    (cond ((and (> end-pos 2)
-                (equal "es" (subseq str (- end-pos 2) end-pos)))
-           (subseq str 0 (- end-pos 2)))
-          ((and (> end-pos 1)
-                (equal "s" (subseq str (- end-pos 1) end-pos)))
-           (subseq str 0 (- end-pos 1))))))
-
 (defun get-string-concepts (str &optional (syntax-tag :other))
   "Get all Scone concepts associated with a particular string"
   (when str ; if STR is NIL, return NIL as well
     (mapcar #'first
-            (lookup-definitions (remove-punctuation str) (list syntax-tag)))))
+            (lookup-definitions str (list syntax-tag)))))
 
 (defvar *constructions* nil
     "List of all defined constructions")
@@ -1504,33 +1506,18 @@
    meanings in this list will have the same attributes (e.g. all will be
    considered plural, or end in periods, etc.)"
   (loop for concept in (get-string-concepts word syntax-tag)
-       collect (apply #'define-meaning concept
-                      position (1+ position)
-                      (append
-                       (list :score (or (get-element-property concept :score)
-                                        1))
-                       attributes))))
+     collect (funcall #'define-meaning concept position (1+ position) attributes
+                      (or (get-element-property concept :score) 1))))
 
-(defun get-string-meanings (word position)
-  "Retrieve a list of all meanings associated with all morphological forms of a
-   given string (i.e. given the string 'deer' it will return both the singular
-   and plural meanings of 'deer')"
-  (let ((punctuation-attrs
-         (list :ends-in-comma (str-ends-in-commap word)
-               :ends-in-period (str-ends-in-periodp word)
-               :ends-in-question-mark (str-ends-in-question-markp word)))
-        (cleaned-word (remove-punctuation word)))
-    (funcall #'append ; append word as-is (in case punctuation part of word)
-             (exact-meanings word position
-                             (list :plural nil :ends-in-comma nil
-                                   :ends-in-period nil
-                                   :ends-in-question-mark nil))
-             (exact-meanings cleaned-word position ; append word w/o punctuation
-                             (append (list :plural nil) punctuation-attrs))
-             ;; append base form of plural word
-             (exact-meanings (plural-base cleaned-word) position
-                             (append (list :plural t) punctuation-attrs)
-                             :noun))))
+(unless (fboundp 'get-string-meanings)
+  (defun get-string-meanings (word position)
+    "Retrieve a list of all meanings associated with all morphological forms of
+     a given string (i.e. given the string 'deer' it will return both the
+     singular and plural meanings of 'deer')
+
+     Due to morphology being grammar-dependent, force user to redefine this
+     inside the grammar file"
+    (error "Must be redefined inside grammar file!")))
 
 (defun setup-new-parse ()
   "Reset everything for a fresh parse"
@@ -1557,9 +1544,7 @@
    agenda"
   (loop for concept in
        (nconc (list (define-meaning new-word position (1+ position)
-                      :plural nil :ends-in-comma nil :ends-in-period nil
-                      :ends-in-question-mark nil
-                      :score (- 1 *string-as-concept-penalty*)))
+                                    nil (- 1 *string-as-concept-penalty*)))
               (get-string-meanings new-word position))
      do (add-to-ht *agenda*
                    (get-meaning-key concept)
