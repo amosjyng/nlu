@@ -24,7 +24,7 @@
 ;;;
 ;;; To profile on SBCL, run
 ;;; (require :sb-sprof)
-;;; (sb-sprof:with-profiling (:show-progress t :loop t :report :graph)
+;;; (sb-sprof:with-profiling (:show-progress t :loop nil :report :graph)
 ;;;  (nlu "Please pick up a large red table leg and screw in the bolts."))
 
 ;;; TODO:
