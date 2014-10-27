@@ -1,3 +1,9 @@
+(defun reload-grammar ()
+  "Reload this grammar file
+
+   Used only for development"
+  (load "nlu/grammar"))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;                           ;;;
 ;;;   GRAMMATICAL ENTITIES    ;;;

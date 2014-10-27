@@ -116,6 +116,19 @@
   (setf *debug-payload* t)
   (setf *debug-goal-discovery* t))
 
+(defun debug-none ()
+  "Set all debug global variables to NIL, and make element names normal
+
+   Only used for debugging"
+  (setf *generate-long-element-names* nil)
+  
+  (setf *debug-ht-update* nil)
+  (setf *debug-isa-caching* nil)
+  (setf *debug-add-failures* nil)
+  (setf *debug-con-creation* nil)
+  (setf *debug-payload* nil)
+  (setf *debug-goal-discovery* nil))
+
 (defun round-decimal (number shift)
   "Rounds a number to something"
   (/ (round (* number shift)) shift))
