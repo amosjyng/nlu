@@ -7,7 +7,7 @@ This is a natural language parser for the Scone project. To get it running,
 2. In the terminal, run `sbcl --load initialize.lisp`
 3. Once SBCL has finished loading, run `(nlu "Please pick up a large screwdriver and screw in the bolts.")`
 
-Currently, due to context-switching, the parse takes about 9 seconds. Upon completion, you should see the output
+Currently, due to context-switching, the parse takes about 25 seconds. Upon completion, you should see the output
 
 ```
 (:COMMAND

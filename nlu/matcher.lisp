@@ -1166,18 +1166,24 @@
   (increment-pattern-count (get-match-construction new-match)) 
   ;; create a new matched-construction from this match
   (let ((matched-construction
-         (make-instance 'matched-construction 
-                        ;; same matched-construction rule
-                        :rule (get-match-construction new-match) 
-                        :start (start-of new-match)
-                        :end (end-of new-match)
-                        :components (match-so-far new-match)
-                        :attributes (collect-match-attrs new-match)
-                        :score (* (match-score new-match)
-                                  (construction-score-multiplier
-                                   (get-match-construction new-match)))
-                        :scone-element (run-payload new-match))))
-    (setf (context-of matched-construction) *context*)
+         (handler-case
+             (make-instance 'matched-construction 
+                            ;; same matched-construction rule
+                            :rule (get-match-construction new-match) 
+                            :start (start-of new-match)
+                            :end (end-of new-match)
+                            :components (match-so-far new-match)
+                            :attributes (collect-match-attrs new-match)
+                            :score (* (match-score new-match)
+                                      (construction-score-multiplier
+                                       (get-match-construction new-match)))
+                            :scone-element (run-payload new-match))
+             (simple-error (se)
+               (when *debug-con-creation*
+                 (print-debug "~S" se)
+                 nil)))))
+    (when matched-construction
+      (setf (context-of matched-construction) *context*))
     (change-context *last-parse-context*)
     matched-construction))
 
@@ -1472,12 +1478,9 @@
    agenda"
   (let ((completion (can-be-completed? match)))
     (when completion
-      (handler-case
-          (let ((new-cons (make-matched-construction match)))
-            (add-to-ht *agenda* (get-meaning-key new-cons) new-cons))
-        (simple-error (se)
-          (when *debug-con-creation*
-              (print-debug "~S" se)))))))
+      (let ((new-cons (make-matched-construction match)))
+        (when new-cons
+          (add-to-ht *agenda* (get-meaning-key new-cons) new-cons))))))
 
 (defun single-antecedent-satisfied? (span)
   "Turn into a meaning span with a finished construction if possible (i.e. a
