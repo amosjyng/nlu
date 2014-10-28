@@ -375,7 +375,7 @@
   (new-indv nil {definition clause (grammatical entity)}))
 
 (defconstruction command
- ((? "please" discard) (= (:structured {action}) action))
+ ((? "please" discard) (= (:structured :present {action}) action))
 
  (new-statement {first person} {command} {second person}
 		:c (meaning-scone-element (first action))))
