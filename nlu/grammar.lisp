@@ -67,10 +67,7 @@
   ;;(new-is-a {blue.s.01} {entity modifier})
   (new-is-a {short.a.03} {entity modifier})
 
-  (english {kick.v.01} :verb "kicks")
-  (english {kick.v.01} :verb "kicked")
-  (english {kick.v.01} :verb "kicking")
-  (english {hammer.v.01} :verb "hammered")
+  (english {pick_up.v.01} :verb "pick")
 
   (new-relation {command}
                 :a-inst-of {entity}
@@ -103,6 +100,14 @@
   "See if a string ends in a certain character"
   (eq char (aref str (1- (length str)))))
 
+(defun str-ends-in (str suffix)
+  "See if a string ends (in a case-sensitive manner) in another string. If so,
+   returns the string without the suffix"
+  (let* ((end-pos (length str))
+         (base-end (- end-pos (length suffix))))
+    (when (and (> base-end 0) (equal suffix (subseq str base-end end-pos)))
+      (subseq str 0 base-end))))
+
 (defun remove-char (str char)
   "If STR has CHAR at the end, remove it"
   (if (str-ends-in-charp str char)
@@ -110,6 +115,7 @@
     str))
 
 (defmacro defpunctuation-attr (attr punctuation-symbol)
+  "Define a punctuation mark as an attribute"
   `(defattr ,attr
        ;; how do we detect it?
        (lambda (word) (str-ends-in-charp word ,punctuation-symbol))
@@ -122,23 +128,35 @@
 (defpunctuation-attr :ends-in-. #\.)
 (defpunctuation-attr :ends-in-? #\?)
 
-(defattr :plural
-    ;; how do we detect it?
-    (lambda (word) (str-ends-in-charp word #\s))
-  ;; how do we remove it?
-  (lambda (word)
-    (let ((end-pos (length word)))
-      (cond ((and (> end-pos 2)
-                  (equal "es" (subseq word (- end-pos 2) end-pos)))
-             (subseq word 0 (- end-pos 2)))
-            ((and (> end-pos 1)
-                  (equal "s" (subseq word (- end-pos 1) end-pos)))
-             (subseq word 0 (- end-pos 1))))))
-  
-  ;; how do we detect it in a newly finished match?
-  (lambda (match)
-    (let ((entity (first (gethash 'entity (match-so-far match)))))
-      (when entity (attr? :plural entity)))))
+(defmacro inherit-from (attr match-component)
+  "Inherit an attribute from one component of a match"
+  `(lambda (match)
+     (let ((component (first (gethash ',match-component (match-so-far match)))))
+       (when component (attr? ,attr component)))))
+
+(defmacro defsuffix (attr suffixes match-component)
+  "Define a suffix ending (e.g. -ed or -ing or -es) as an attribute"
+  `(let ((detection-func
+          (lambda (word)
+            (or ,@(mapcar (lambda (suffix) `(str-ends-in word ,suffix))
+                          suffixes)))))
+     (defattr ,attr
+       ;; how do we detect it?
+       detection-func
+     ;; how do we remove it?
+     detection-func
+     ;; how do we detect it in a newly finished match?
+     (inherit-from ,attr ,match-component))))
+
+(defsuffix :plural ("es" "s") entity)
+(defsuffix :past ("ed") action)
+
+(defattr :present
+    (lambda (word)
+      (every #'null
+             (mapcar (lambda (suffix) (str-ends-in word suffix)) '("ed"))))
+  (lambda (word) word)
+  (inherit-from :present action))
 
 (defun get-string-meanings (word position)
   "Retrieve a list of all meanings associated with all morphological forms of a
@@ -149,9 +167,13 @@
              (exact-meanings word position attrs)
              (with-attrs (:ends-in-comma :ends-in-. :ends-in-?)
                (funcall #'append
+                        (when-attr :present
+                          (exact-meanings word position attrs :verb))
                         (exact-meanings word position attrs)
                         (when-attr :plural
-                          (exact-meanings word position attrs :noun)))))))
+                          (exact-meanings word position attrs :noun))
+                        (when-attr :past
+                                   (exact-meanings word position attrs :verb)))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;                    ;;;
@@ -235,15 +257,15 @@
   (mapcar #'meaning-scone-element items))
 
 (defmacro defaction (action-name action-in-between-name
-                     action-scone-element word1 word2)
+                     action-scone-element extra)
   `(defconstructions ,(list action-name action-in-between-name)
-     (((= ,word1 discard)
-       (= ,word2 discard)
+     (((= ,action-scone-element action)
+       (= ,extra discard)
        (? (:structured {entity}) theme))
       
-      ((= ,word1 discard)
+      ((= ,action-scone-element action)
        (= (:structured {entity}) theme)
-       (= ,word2 discard)))
+       (= ,extra discard)))
      
      (let ((new-node (ensure-indv-exists ,action-scone-element))
            (action-object
@@ -253,17 +275,11 @@
          (x-is-the-y-of-z action-object *action-object* new-node))
        new-node)))
 
-(defaction hammer-in-x hammer-x-in {hammer.v.01} "hammer" "in")
-(defaction hammer-down-x hammer-x-down {hammer.v.01} "hammer" "down")
-(defaction nail-down-x nail-x-down {nail.v.01} "nail" "down")
-(defaction pick-up-x pick-x-up {pick_up.v.01} "pick" "up")
-(defaction screw-in-x screw-x-in {screw.v.03} "screw" "in")
-;;; now for the gerunds
-(defaction hammering-in-x hammering-x-in {hammer.v.01} "hammering" "in")
-(defaction hammering-down-x hammering-x-down {hammer.v.01} "hammering" "down")
-(defaction nailing-down-x nailing-x-down {nail.v.01} "nailing" "down")
-(defaction picking-up-x picking-x-up {pick_up.v.01} "picking" "up")
-(defaction screwing-in-x screwing-x-in {screw.v.03} "screwing" "in")
+(defaction hammer-in-x hammer-x-in {hammer.v.01} "in")
+(defaction hammer-down-x hammer-x-down {hammer.v.01} "down")
+(defaction nail-down-x nail-x-down {nail.v.01} "down")
+(defaction pick-up-x pick-x-up {pick_up.v.01} "up")
+(defaction screw-in-x screw-x-in {screw.v.03} "in")
 
 (defmacro deft-action (v-r-o v-o-to-r action)
   `(defconstructions ,(list v-r-o v-o-to-r)

@@ -889,6 +889,10 @@
   "Extract component from hash map of construction"
   (first (get-components component-name construction)))
 
+(defun get-first-match-component (component-name match)
+  "Extract first component from list of components in match"
+  (first (gethash component-name (match-so-far match))))
+
 (defun get-mse (component-name construction)
   "Extract Scone element representing the first element in a certain
    component of a matched construction"
@@ -1324,9 +1328,11 @@
        (eq (class-of span1) (class-of span2))
        (if (typep span1 'meaning-span)
            (let* ((span1-mse
-                   (get-meaning-span-meaning span1))
+                   (meaning-scone-element
+                    (get-meaning-span-meaning span1)))
                   (span2-mse
-                   (get-meaning-span-meaning span2))
+                   (meaning-scone-element
+                    (get-meaning-span-meaning span2)))
                   (span1-type
                    (if (stringp span1-mse)
                        span1-mse
@@ -1335,7 +1341,11 @@
                    (if (stringp span2-mse)
                        span2-mse
                      (get-type span2-mse))))
-             (data-equalp span1-type span2-type))
+             (and (data-equalp span1-type span2-type)
+                  (equalp (meaning-attributes
+                           (get-meaning-span-meaning span1))
+                          (meaning-attributes
+                           (get-meaning-span-meaning span2)))))
            t)
        (if (typep span1 'right-hook)
            (eq (get-right-hook-pattern span1) (get-right-hook-pattern span2))
@@ -1415,7 +1425,7 @@
   "Get the hash table key for a newly created meaning object"
   (make-instance 'meaning-span
                  :range (get-range-only meaning)
-                 :meaning (meaning-scone-element meaning)))
+                 :meaning meaning))
 
 (defun get-meaning-value (meaning)
   "Get the hash table value of some object that is to be used as a meaning"
