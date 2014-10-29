@@ -259,11 +259,11 @@
 (defmacro defaction (action-name action-in-between-name
                      action-scone-element extra)
   `(defconstructions ,(list action-name action-in-between-name)
-     (((= ,action-scone-element action)
+     (((= (:unstructured ,action-scone-element) action)
        (= ,extra discard)
        (? (:structured {entity}) theme))
       
-      ((= ,action-scone-element action)
+      ((= (:unstructured ,action-scone-element) action)
        (= (:structured {entity}) theme)
        (= ,extra discard)))
      
