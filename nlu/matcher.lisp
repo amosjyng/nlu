@@ -90,6 +90,12 @@
         (mark-role y z m :downscan t)
         (marker-on? x m)))))
 
+(defun get-type (element)
+  "Return ELEMENT if it's a type, and the parent of ELEMENT otherwise"
+  (cond ((listp element) (mapcar #'get-type element))
+        ((type-node? element) element)
+        (t (parent-element element))))
+
 (defmacro print-debug (statement &rest args)
   "Prints debugging STATEMENT out to user"
   `(progn
@@ -1321,12 +1327,6 @@
                                            (get-span-range span2))
                      :pattern (get-right-hook-pattern span2))
       (combine-spans span2 span1)))
-
-(defun get-type (element)
-  "Return ELEMENT if it's a type, and the parent of ELEMENT otherwise"
-  (cond ((listp element) (mapcar #'get-type element))
-        ((type-node? element) element)
-        (t (parent-element element))))
 
 (defun semi-equal (span1 span2)
   "See if two spans are equivalent in the semiring"
