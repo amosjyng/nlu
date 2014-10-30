@@ -1038,7 +1038,12 @@
 (defmethod matches? ((actual-token t) (expected-token symbol))
   "See if ACTUAL-TOKEN matches some condition specified by
    EXPECTED-TOKEN (e.g. :unstructured)"
-  (eq expected-token :unstructured)) ; only if it's unstructured would this be called
+  (cond ((eq expected-token :unstructured)
+         t)
+        ((eq expected-token :string)
+         (stringp actual-token))
+        ((eq expected-token :meaning)
+         (meaningp actual-token))))
 
 (defmethod matches? ((actual-token list) (expected-token symbol))
   "See whether everything in ACTUAL-TOKEN satisfies a certain attribute"

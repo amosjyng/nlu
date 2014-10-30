@@ -355,25 +355,6 @@
   (mapcar #'meaning-scone-element clauses))
 (setf (construction-score-multiplier clauses) 0.8)
 
-(defconstruction definition
-  ((= {indefinite article (grammatical entity)} discard)
-   (= :unstructured unknown)
-   (= "is" discard)
-   (= (:structured {entity}) something-existing))
-
-  (let* ((unknown-thing (meaning-scone-element (first unknown)))
-	 (singular-form
-	  (when (stringp unknown-thing) unknown-thing))
-	 (possibly-new-thing (or singular-form unknown-thing))
-	 (existing-meaning
-	  (simple-get-meaning 'entity something-existing)))
-    (if (and (not (null singular-form))
-	     (null (lookup-definitions singular-form)))
-	(convert-parent-wire-to-link
-	 (new-type singular-form existing-meaning))
-      (new-is-a possibly-new-thing existing-meaning)))
-  (new-indv nil {definition clause (grammatical entity)}))
-
 (defconstruction command
  ((? "please" discard) (= (:structured :present {action}) action))
 
@@ -422,28 +403,32 @@
    (= "before" discard)
    (= (:structured {action}) second-action)))
 
-(defun singularize (plural-form)
-  "Obtain the singular form of a plural word"
-  ;; simply assume it ends in 's' for now
-  (subseq plural-form 0 (1- (length plural-form))))
-
-(defconstruction definition2
-  ((= :unstructured unknown) (= "are" discard)
-   (= {entity} something-existing))
+(defconstruction definition
+  ((= {indefinite article (grammatical entity)} discard)
+   (= (:unstructured :string) unknown)
+   (= "is" discard)
+   (= {indefinite article (grammatical entity)} discard)
+   (= (:unstructured {entity}) something-existing))
 
   (let* ((unknown-thing (meaning-scone-element (first unknown)))
-	 (singular-form
-	  (when (stringp unknown-thing)
-	    (singularize unknown-thing)))
-	 (possibly-new-thing (or singular-form unknown-thing))
-	 (existing-meaning
-	  (simple-get-meaning 'entity something-existing)))
-    (if (and (not (null singular-form))
-	     (null (lookup-definitions singular-form)))
-	(convert-parent-wire-to-link
-	 (new-type singular-form existing-meaning))
-      (new-is-a possibly-new-thing existing-meaning)))
+	 (existing-meaning (meaning-scone-element (first something-existing))))
+    (if (null (lookup-definitions unknown-thing))
+        (convert-parent-wire-to-link
+         (new-type unknown-thing existing-meaning))
+        (error "Definitions already exist for this string")))
   (new-indv nil {definition clause (grammatical entity)})) ; don't combine
+
+(defconstruction definition
+  ((= {indefinite article (grammatical entity)} discard)
+   (= (:unstructured {entity}) unknown)
+   (= "is" discard)
+   (= {indefinite article (grammatical entity)} discard)
+   (= (:unstructured {entity}) something-existing))
+
+  (let* ((unknown-thing (meaning-scone-element (first unknown)))
+	 (existing-meaning (meaning-scone-element (first something-existing))))
+    (new-is-a unknown-thing existing-meaning))
+  (new-indv nil {definition clause (grammatical entity)}))
 
 (defconstruction is-a-query
   ((= "is" discard)
@@ -558,6 +543,12 @@
                 (list (list :object
                             (lispify (get-first-component 'object mc)))))))
 
+(defun lispify-definition (mc)
+  "Turn a matched construction representing a definition into a list"
+  (let ((mse (get-mse 'unknown mc)))
+    (list :define (if (stringp mse) (lookup-element mse) mse)
+          (list :as (get-mse 'something-existing mc)))))
+
 (defun lispify-sentence (matched-construction)
   "Turn a matched construction representing a sentence into a list"
   ;; I mean a "sentence" is a purely grammatical construct... it is
@@ -591,6 +582,9 @@
 	  ((simple-is-x-a-y? (meaning-scone-element goal-value)
 			     {why query})
 	   (lispify-why-query goal-value))
+          ((simple-is-x-a-y? (meaning-scone-element goal-value)
+                             {definition clause (grammatical entity)})
+           (lispify-definition goal-value))
 	  ((simple-is-x-a-y? (meaning-scone-element goal-value)
 			     {sentence (grammatical entity)})
 	   (lispify-sentence goal-value))
