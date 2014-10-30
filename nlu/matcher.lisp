@@ -1530,9 +1530,12 @@
   "Retrieve a list of all meanings associated with this exact sttring. All
    meanings in this list will have the same attributes (e.g. all will be
    considered plural, or end in periods, etc.)"
-  (loop for concept in (get-string-concepts word syntax-tag)
-     collect (funcall #'define-meaning concept position (1+ position) attributes
-                      (or (get-element-property concept :score) 1))))
+  (nconc (list (define-meaning word position (1+ position)
+                               attributes (- 1 *string-as-concept-penalty*)))
+         (loop for concept in (get-string-concepts word syntax-tag)
+            collect (funcall #'define-meaning concept position (1+ position)
+                             attributes
+                             (or (get-element-property concept :score) 1)))))
 
 (unless (fboundp 'get-string-meanings)
   (defun get-string-meanings (word position)
@@ -1567,10 +1570,7 @@
 (defun add-word-meanings-to-agenda (new-word position)
   "Add all meanings of a given string (including the raw string itself) to the
    agenda"
-  (loop for concept in
-       (nconc (list (define-meaning new-word position (1+ position)
-                                    nil (- 1 *string-as-concept-penalty*)))
-              (get-string-meanings new-word position))
+  (loop for concept in (get-string-meanings new-word position)
      do (add-to-ht *agenda*
                    (get-meaning-key concept)
                    (get-meaning-value concept))))
