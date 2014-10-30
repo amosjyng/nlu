@@ -555,7 +555,8 @@
   "Turn a matched construction representing a why-query into a list"
   (list :why?
         (append (lispify-action (get-first-component 'action mc))
-                (list (lispify (get-first-component 'object mc))))))
+                (list (list :object
+                            (lispify (get-first-component 'object mc)))))))
 
 (defun lispify-sentence (matched-construction)
   "Turn a matched construction representing a sentence into a list"
