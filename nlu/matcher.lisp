@@ -1299,7 +1299,6 @@
   *GOAL-SPAN*"
   (make-instance 'span :range range))
 
-
 (defmethod print-object ((object span) stream)
   "Shows information about a generic SPAN (should never happen) when printing
    to a stream"

@@ -454,9 +454,9 @@
   (new-indv nil {is-a query}))
 
 (defconstruction why-query
-  ((= "why" discard) (? "exactly" discard) (= "was" discard)
+  ((= "why" discard) (? "exactly" discard) (= "were" discard)
    (= (:structured {entity}) object)
-   (= (:structured :ends-in-? {action}) action))
+   (= (:structured :past :ends-in-? {action}) action))
   (new-indv nil {why query}))
 
 (defconstruction how-query
@@ -502,16 +502,18 @@
 	 (or (get-first-component 'action matched-construction)
 	     (get-first-component 'ordered-action matched-construction)))))
 
-(defun lispify-action (matched-construction)
-  "Turn a matched constructino representing an {action} into a list"
-  (let* ((object (get-first-component 'theme matched-construction))
-	 (recipient (get-first-component 'recipient matched-construction))
+(defun lispify-action (mc)
+  "Turn a matched construction representing an {action} into a list"
+  (let* ((action (parent-element (meaning-scone-element mc)))
+         (action-info (if (attr? :past mc) (list :past action) action))
+         (object (get-first-component 'theme mc))
+	 (recipient (get-first-component 'recipient mc))
 	 (o-list (when object
 		   (list :object (lispify object))))
 	 (r-list (when recipient
 		   (list :recipient (lispify recipient)))))
     (cons :action
-	  (cons (parent-element (meaning-scone-element matched-construction))
+	  (cons action-info
 		(cond ((and o-list r-list)
 		       (list o-list r-list))
 		      (o-list (list o-list))
@@ -549,12 +551,11 @@
 	(lispify (get-first-component 'agent matched-construction))
 	(lispify (get-first-component 'action matched-construction))))
 
-(defun lispify-why-query (matched-construction)
+(defun lispify-why-query (mc)
   "Turn a matched construction representing a why-query into a list"
-  (list :why-query
-	(list :action
-	      (parent-element (get-mse 'action matched-construction))
-	      (lispify (get-first-component 'object matched-construction)))))
+  (list :why?
+        (append (lispify-action (get-first-component 'action mc))
+                (list (lispify (get-first-component 'object mc))))))
 
 (defun lispify-sentence (matched-construction)
   "Turn a matched construction representing a sentence into a list"
