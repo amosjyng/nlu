@@ -53,14 +53,8 @@
    of a Scone element for a MEANING object")
 
 ;;; DEBUGGING PARAMETERS
-(defvar *debug-ht-update* nil
-  "Print successful updates to the chart/agenda")
-
 (defvar *debug-isa-caching* nil
   "Print reads and updates to the *ISA-CACHE*")
-
-(defvar *debug-add-failures* nil
-  "Print failed adds to the chart/agenda")
 
 (defvar *debug-con-creation* nil
   "Print errors from completed matches that can't become matched constructions")
@@ -70,6 +64,9 @@
 
 (defvar *debug-goal-discovery* nil
   "Print all newly discovered potential goal values")
+
+(defvar *debug-nodes* nil
+  "Print all current nodes for beam search")
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;                                   ;;;
@@ -115,12 +112,11 @@
    Only used for debugging"
   (setf *generate-long-element-names* t)
   
-  (setf *debug-ht-update* t)
   (setf *debug-isa-caching* t)
-  (setf *debug-add-failures* t)
   (setf *debug-con-creation* t)
   (setf *debug-payload* t)
-  (setf *debug-goal-discovery* t))
+  (setf *debug-goal-discovery* t)
+  (setf *debug-nodes* t))
 
 (defun debug-none ()
   "Set all debug global variables to NIL, and make element names normal
@@ -128,12 +124,11 @@
    Only used for debugging"
   (setf *generate-long-element-names* nil)
   
-  (setf *debug-ht-update* nil)
   (setf *debug-isa-caching* nil)
-  (setf *debug-add-failures* nil)
   (setf *debug-con-creation* nil)
   (setf *debug-payload* nil)
-  (setf *debug-goal-discovery* nil))
+  (setf *debug-goal-discovery* nil)
+  (setf *debug-nodes* nil))
 
 (defun round-decimal (number shift)
   "Rounds a number to something"
@@ -152,6 +147,16 @@
     ((= index 1) (cons item list))
     ((endp list) (list "Index too big!"))
     (t (cons (first list) (insert-at item (rest list) (1- index))))))
+
+(defun make-appendable (a)
+  "If NIL, then return NIL. Otherwise return (a)"
+  (if (null a)
+      nil
+      (list a)))
+
+(defun replace-head (list new-head)
+  "Replace head of a list with something else"
+  (cons new-head (rest list)))
 
 (defun ensure-indv-exists (scone-element)
   "If SCONE-ELEMENT is a type node, then returns a new indv node that is one of
@@ -780,6 +785,15 @@
   "Obtains the next element to be matched in the pattern"
   (nth (match-progress match) (get-match-pattern match)))
 
+(defun can-be-continued? (match)
+  "Checks if a pattern can be continued (even if it's finished, it may be
+   continued if the last token to be matched can be matched any number of
+   times)"
+  ;; only way it can be continued is if we're at the end and the end is not an
+  ;; operator that can allow any number of tokens to be matched
+  (let ((last-token (first (last (get-match-pattern match)))))
+    (not (and (is-completed? match) (not (can-be-skipped? last-token))))))
+
 (defun is-completed? (match)
   "Checks whether the pattern a MATCH object is trying to match, has been 
    successfully matched in its entirety."
@@ -1035,6 +1049,11 @@
         ;; entity
         (t (get-attr expected-token actual-token))))
 
+(defmethod matches? ((actual-token list) (expected-token symbol))
+  "See whether everything in ACTUAL-TOKEN satisfies a certain attribute"
+  (loop for token in actual-token
+        always (matches? token expected-token)))
+
 (defmethod matches? ((actual-token t) (expected-token symbol))
   "See if ACTUAL-TOKEN matches some condition specified by
    EXPECTED-TOKEN (e.g. :unstructured)"
@@ -1044,11 +1063,6 @@
          (stringp actual-token))
         ((eq expected-token :meaning)
          (meaningp actual-token))))
-
-(defmethod matches? ((actual-token list) (expected-token symbol))
-  "See whether everything in ACTUAL-TOKEN satisfies a certain attribute"
-  (loop for token in actual-token
-        always (matches? actual-token expected-token)))
 
 (defmethod matches? ((actual-token list) (expected-token structure-object))
   "See whether everything in ACTUAL-TOKEN matches EXPECTED-TOKEN"
@@ -1131,11 +1145,15 @@
                          (match-so-far match)))
   (increment-match-progress match)) ; skip this token
 
+(defun skippable? (op)
+  "See if an operator is a skippable one"
+  (member op '(? *)))
+
 (defun can-be-skipped? (next-expected-token)
   "Returns whether or not the next expected token in the pattern can be skipped"
   ;; OPERATOR returns NIL when NEXT-EXPECTED-TOKEN is not a list, so no need to
   ;; check for that
-  (member (operator next-expected-token) '(? *)))
+  (skippable? (operator next-expected-token)))
 
 (defun handle-unmatched-token (match next-token next-expected-token)
   "Handle a next-token that was unsuccessfully matched. If it has an appropriate
@@ -1159,20 +1177,28 @@
     - match progress will be increased if appropriate
     - if BINDING-VARIABLE is specified (see MATCH class documentation), then
       NEXT-TOKEN will be added to the list of bound variables
-   Othewise, see if the next expected token is optional and if we can match the
+   Otherwise, see if the next expected token is optional and if we can match the
    NEXT-TOKEN to something after skipping the optional expected token. If so,
-   then the above steps apply. If not, then nothing is done."
-  (let* ((next-expected-token (get-next-expected-token match))
-         (match-result (matches? next-token next-expected-token)))
-    (if match-result
-        (handle-matched-token match next-expected-token match-result
-                              next-token)
-        (handle-unmatched-token match next-token next-expected-token))))
+   then the above steps apply. If not, then nothing is done.
+
+   If there is nothing more to match, throws an error."
+  (if (can-be-continued? match)
+    (let* ((next-expected-token (get-next-expected-token match))
+           (match-result (matches? next-token next-expected-token)))
+      (if match-result
+          (handle-matched-token match next-expected-token match-result
+                                next-token)
+          (handle-unmatched-token match next-token next-expected-token)))
+    (error (format nil "Match ~S is already finished" match))))
 
 (defun make-matched-construction (new-match)
   "Returns a matched-construction from the completed match, and handles other
   side effects as well. Current, that means running the matched-construction
   rule payload, as well as incrementing the pattern count."
+  ;; check that match is actually completed
+  (unless (can-be-completed? new-match)
+    (error (format nil "Trying to create construction from incomplete match ~S!"
+                   new-match)))
   ;; increment the number of times this particular pattern was matched
   (increment-pattern-count (get-match-construction new-match)) 
   ;; create a new matched-construction from this match
@@ -1213,11 +1239,29 @@
   (remove-if #'null
              (loop for match in matches collect (continue-match match token))))
 
+(defun continue-tokens (match tokens)
+  "Continue a single match with a list of tokens to continue with"
+  (remove-if #'null
+             (loop for token in tokens collect (continue-match match token))))
+
 (defun get-string-concepts (str &optional (syntax-tag :other))
   "Get all Scone concepts associated with a particular string"
   (when str ; if STR is NIL, return NIL as well
     (mapcar #'first
             (lookup-definitions str (list syntax-tag)))))
+
+(defun exact-meanings (word position attributes &optional (syntax-tag :other))
+  "Retrieve a list of all meanings associated with this exact string. The same
+   set of attributes (e.g. plural, or ends in a period) will be assigned to each
+   meaning in this list"
+  ;; get the exact string itself as a "meaning"
+  (nconc (list (define-meaning word position (1+ position)
+                               attributes (- 1 *string-as-concept-penalty*)))
+         ;; as well as each concept of that syntax tag
+         (loop for concept in (get-string-concepts word syntax-tag)
+            collect (funcall #'define-meaning concept position (1+ position)
+                             attributes
+                             (or (get-element-property concept :score) 1)))))
 
 (defvar *constructions* nil
     "List of all defined constructions")
@@ -1248,299 +1292,11 @@
                  (is-x-a-y? (get-mse 'first-thing  *question*)
                             (get-mse 'second-thing *question*)))))))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;                        ;;;
-;;;     SEMIRING LOGIC     ;;;
-;;;                        ;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(ql:quickload "cl-custom-hash-table")
-(ql:quickload "split-sequence")
-
-;;; currently a great deal of redundancy here
-
-(defclass span ()
-  ((range
-    :documentation "The range in the sentence that this SPAN covers"
-    :type range
-    :initarg :range
-    :initform (error "You MUST provide the range for this span")
-    :reader get-span-range))
-  (:documentation
-   "Keeps track of information about the different things that
-    span a sentence"))
-
-(defclass meaning-span (span)
-  ((meaning
-    :documentation
-    "The Scone element that represents a certain part of a sentence"
-    :type meaning
-    :initarg :meaning
-    :initform (error "You MUST provide the meaning this is associated with!")
-    :reader get-meaning-span-meaning))
-  (:documentation
-   "Keeps track of information about a construction/meaning/str that are
-    essential to matching it with a right-hook"))
-
-(defclass right-hook (span)
-  ((pattern
-    :documentation
-    "The pattern the right-hook that contains the match is trying to complete"
-    :type list
-    :initarg :pattern
-    :initform (error "You MUST provide the pattern that this right hook is
-     trying to match")
-    :reader get-right-hook-pattern))
-  (:documentation
-   "Keeps track of information about a match that is essential to finding a
-    suitable next token for it"))
-
-(defparameter *goal-span* nil
-  "The SPAN object that determines which part of the sentence the GOAL should
-  span")
-
-(defun define-goal-span (range)
-  "Given the range of a sentence, return a SPAN that will end up defining the
-  *GOAL-SPAN*"
-  (make-instance 'span :range range))
-
-(defmethod print-object ((object span) stream)
-  "Shows information about a generic SPAN (should never happen) when printing
-   to a stream"
-  (print-unreadable-object (object stream :type t)
-    (format stream "~S" (get-span-range object))))
-
-(defmethod print-object ((object meaning-span) stream)
-  "Shows information about a MEANING-SPAN when printing to a stream"
-  (print-unreadable-object (object stream :type t)
-    (format stream "~S ~S"
-            (get-span-range object) (get-meaning-span-meaning object))))
-
-(defmethod print-object ((object right-hook) stream)
-  "Shows information about a RIGHT-HOOK when printing to a stream"
-  (print-unreadable-object (object stream :type t)
-    (format stream "~S ~S"
-            (get-span-range object)
-            (get-right-hook-pattern object))))
-
-(defun combine-spans (span1 span2)
-  "Combine two ranges (assumes span1 begins before span2)"
-  (if (typep span2 'right-hook)
-      (make-instance 'right-hook
-                     :range (subsume-range (copy-range (get-span-range span1))
-                                           (get-span-range span2))
-                     :pattern (get-right-hook-pattern span2))
-      (combine-spans span2 span1)))
-
-(defun semi-equal (span1 span2)
-  "See if two spans are equivalent in the semiring"
-  (and (data-equalp (get-span-range span1) (get-span-range span2))
-       (eq (class-of span1) (class-of span2))
-       (if (typep span1 'meaning-span)
-           (let* ((span1-mse
-                   (meaning-scone-element
-                    (get-meaning-span-meaning span1)))
-                  (span2-mse
-                   (meaning-scone-element
-                    (get-meaning-span-meaning span2)))
-                  (span1-type
-                   (if (stringp span1-mse)
-                       span1-mse
-                     (get-type span1-mse)))
-                  (span2-type
-                   (if (stringp span2-mse)
-                       span2-mse
-                     (get-type span2-mse))))
-             (and (data-equalp span1-type span2-type)
-                  (equalp (meaning-attributes
-                           (get-meaning-span-meaning span1))
-                          (meaning-attributes
-                           (get-meaning-span-meaning span2)))))
-           t)
-       (if (typep span1 'right-hook)
-           (eq (get-right-hook-pattern span1) (get-right-hook-pattern span2))
-           t)))
-
-(defun semi-hash (data)
-  "Hash function that simply returns the sum of the range start and end in a
-   semiring object that spans a certain range"
-  ;; todo: make start and end different and add in type as well
-  (let ((range (get-span-range data)))
-    (if (null (start-of range))
-        999999999
-        (+ (start-of range) (* 1000 (end-of range))))))
-
-(cl-custom-hash-table:define-custom-hash-table-constructor make-semiring-ht
-    :test semi-equal :hash-function semi-hash)
-
-(defparameter *agenda* (make-semiring-ht)
-  "Create a hash-table for the agenda using SEMI-EQUAP as the comparison
-   function and SEMI-HASH for the hash function")
-
-(defparameter *chart* (make-semiring-ht)
-  "Create a hash-table for the chart using SEMI-EQUAL as the comparison
-   function and SEMI-HASH for the hash function")
-
-(defun both-antecedents-satisfied? (item1 item2)
-  "See if item1 in the agenda completes a rule with item2 in the chart"
-  (and (typep item1 'meaning-span) (typep item2 'right-hook)
-       (or (null (start-of (get-span-range item2)))
-           (right-after? (get-span-range item2) (get-span-range item1)))))
-
-(defparameter *semiring-zero* nil)
-(defparameter *semiring-one* nil)
-
-(defun seminull (value)
-  "Check if a value is equal to semizing zero"
-  ;; for now just check if it's null, since semiring zero is NIL
-  (null value))
-
-(defun semiplus (value1 value2)
-  "Define how to combine chart elements together."
-  (cond ((listp value1) ; then value2 should be a list of matches too
-         (append value1 value2)) ; just add list of matches together
-        (t ; otherwise they're meanings. pick the meaning w/ highest score
-         (if (> (get-score value1) (get-score value2))
-             value1
-             value2))))
-
-(defun semitimes (value1 value2)
-  "Define how to create the value of a new chart element from the values of the
-   two antecedent elements."
-  (cond ((null value1) value2)
-        ;; value1 should always be the value instead of the match
-        ((not (listp value2)) (semitimes value2 value1))
-        (t
-         (let ((results
-                (remove-if (lambda (match) ; keep only valid matches
-                             (or (null match) (zerop (get-score match))))
-                           (mapcar (lambda (match)
-                                     (continue-match match value1))
-                                   value2))))
-           (if (null results)
-               *semiring-zero* ; keep it general
-               results)))))
-
-(defun get-match-key (match)
-  "Get the hash table key for a newly created match object"
-  (make-instance 'right-hook
-                 :range (get-range-only match)
-                 :pattern (get-match-pattern match)))
-
-(defun get-match-value (match)
-  "Get the value of a match to put in the hash-table"
-  (list match))
-
-(defun get-meaning-key (meaning)
-  "Get the hash table key for a newly created meaning object"
-  (make-instance 'meaning-span
-                 :range (get-range-only meaning)
-                 :meaning meaning))
-
-(defun get-meaning-value (meaning)
-  "Get the hash table value of some object that is to be used as a meaning"
-  meaning)
-
-(defun get-ht-value (ht item)
-  "Get the value of ITEM in the hash-table HT. Returns *SEMIRING-ZERO* if ITEM
-   is not found in HT"
-  (cl-custom-hash-table:with-custom-hash-table
-    (alexandria:ensure-gethash item ht *semiring-zero*)))
-
-(defun add-to-ht (ht new-item item-value)
-  "Set the value in HT associated with NEW-ITEM to (semiplus ITEM-VALUE
-  existing-value"
-  (when (null item-value)
-    ;; mostly for debugging
-    (error "null item value"))
-  (let* ((old-value (get-ht-value ht new-item))
-         (result (semiplus old-value item-value))
-         (ht-name (if (eq ht *chart*) "CHART" "AGENDA")))
-    (if (data-equalp old-value result)
-        (when *debug-add-failures*
-          (print-debug "[~A] Failed to replace ~S~%       with ~S"
-                       ht-name old-value item-value))
-        (progn
-          (when *debug-ht-update*
-            (if (seminull old-value)
-                (print-debug "[~A] Adding ~S" ht-name item-value)
-                (print-debug "[~A] Replacing ~S~%       with ~S"
-                             ht-name old-value item-value)))
-          (cl-custom-hash-table:with-custom-hash-table
-            (setf (gethash new-item ht) result))))))
-
-(defun combine-antecedents (item1 item2)
-  "Combine two antecedents and add consequent to agenda"
-  (let ((new-span (combine-spans item1 item2))
-        (result (semitimes (get-ht-value *chart* item1)
-                           (get-ht-value *chart* item2))))
-    (unless (seminull result)
-      (add-to-ht *agenda* new-span result))))
-
-(defun complete-and-add (match)
-  "When possible, turn a match into a matched-construction, and add it to the
-   agenda"
-  (let ((completion (can-be-completed? match)))
-    (when completion
-      (let ((new-cons (make-matched-construction match)))
-        (when new-cons
-          (add-to-ht *agenda* (get-meaning-key new-cons) new-cons))))))
-
-(defun single-antecedent-satisfied? (span)
-  "Turn into a meaning span with a finished construction if possible (i.e. a
-  consequent formed from only one antecedent."
-  (cond ((typep span 'right-hook)
-         (let* ((matches (get-ht-value *chart* span))
-                (incomplete (remove-if #'is-completed? matches)))
-           (mapcar #'complete-and-add matches)
-           (when (and *debug-ht-update* (equal matches incomplete))
-             (print-debug "[CHART] Removing complete ~S~%     incomplete: ~S"
-                          matches incomplete))
-           (cl-custom-hash-table:with-custom-hash-table
-             (setf (gethash span *chart*)
-                   incomplete))))
-        ((and (typep span 'meaning-span)
-              (data-equalp (get-span-range span) (get-span-range *goal-span*)))
-         (progn
-           (when *debug-goal-discovery*
-             (print-debug "[GOAL] Found new valid parse ~S"
-                          (get-ht-value *chart* span)))
-           (add-to-ht *chart* *goal-span* (get-ht-value *chart* span))))))
-
-(defun process-agenda-item (agenda-item)
-  "Put agenda item into chart and see if it can produce any new consequents with
-  existing items in the chart"
-  (let ((old-val (get-ht-value *chart* agenda-item)))
-    (add-to-ht *chart* agenda-item (get-ht-value *agenda* agenda-item))
-    (cl-custom-hash-table:with-custom-hash-table
-      (remhash agenda-item *agenda*))
-    ;; for performance reasons that one function also handles putting things
-    ;; into the chart
-    ;; check now if antecedent satisfied, in case this doesn't beat out
-    ;; the old score but will do so as a finished construction (of
-    ;; course now the problem of this not beating out another item
-    ;; further on in the match is a problem)
-    (single-antecedent-satisfied? agenda-item)
-    ;; have we found a better parse?
-    (unless (data-equalp old-val (get-ht-value *chart* agenda-item))
-        ;; yes we have, so now check with everything in the chart to see if
-        ;; this can be combined with anything else to produce new parses
-        (cl-custom-hash-table:with-custom-hash-table
-          (loop for chart-item being the hash-keys in *chart*
-             do
-               (when (both-antecedents-satisfied? agenda-item chart-item)
-                 (combine-antecedents agenda-item chart-item)))))))
-
-(defun exact-meanings (word position attributes &optional (syntax-tag :other))
-  "Retrieve a list of all meanings associated with this exact sttring. All
-   meanings in this list will have the same attributes (e.g. all will be
-   considered plural, or end in periods, etc.)"
-  (nconc (list (define-meaning word position (1+ position)
-                               attributes (- 1 *string-as-concept-penalty*)))
-         (loop for concept in (get-string-concepts word syntax-tag)
-            collect (funcall #'define-meaning concept position (1+ position)
-                             attributes
-                             (or (get-element-property concept :score) 1)))))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;                                    ;;;
+;;;     GRAMMAR-SPECIFIC FUNCTIONS     ;;;
+;;;                                    ;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (unless (fboundp 'get-string-meanings)
   (defun get-string-meanings (word position)
@@ -1552,114 +1308,165 @@
      inside the grammar file"
     (error "Must be redefined inside grammar file!")))
 
-(defun setup-new-parse ()
-  "Reset everything for a fresh parse"
-  (change-context {general})
-
-  (setf *sentence-position* 0)
-  (setf *goal-span* nil)
-  (setf *agenda* (make-semiring-ht))
-  (setf *chart* (make-semiring-ht))
-  
-  (setf *new-matches* (start-match-against-constructions *constructions*))
-  (setf *isa-cache* (make-hash-table))
-  (setf *isa-cache-writes* 0)
-  (setf *isa-cache-reads* 0)
-  
-  (let ((*debug-ht-update* nil))
-    (loop for new-match in *new-matches*
-       do (add-to-ht *chart*
-                     (get-match-key new-match)
-                     (get-match-value new-match)))))
-
-(defun add-word-meanings-to-agenda (new-word position)
-  "Add all meanings of a given string (including the raw string itself) to the
-   agenda"
-  (loop for concept in (get-string-meanings new-word position)
-     do (add-to-ht *agenda*
-                   (get-meaning-key concept)
-                   (get-meaning-value concept))))
-
-(defun parse-word (new-word position)
-  "Given a new word at the next position in the sentence, keep on evaluating
-   items in the agenda until the agenda is empty"
-  (add-word-meanings-to-agenda new-word position)
-  (loop while (> (hash-table-count *agenda*) 0)
-     ;; may be doing repeated work here
-     do (loop for key being the hash-keys of *agenda*
-           do (process-agenda-item key))))
-
-(defun get-goal-value ()
-  "Get the result of the latest parse"
-  (get-ht-value *chart* *goal-span*))
-
-(defun semiring-parse (word-list start-position)
-  "Run the semiring parsing algorithm on a sentence until the agenda is empty"
-  ;; set what we want to get as a parse result
-  (setf *goal-span*
-        (define-goal-span
-          (define-range start-position (length word-list))))
-  ;; parse one word at a time
-  (loop for word in word-list
-        do (progn
-             (parse-word word start-position)
-             (setf start-position (1+ start-position))))
-  ;; parse completed, now perform actions using parse result
-  (let ((goal-value (get-goal-value)))
-    (when (matched-constructionp goal-value)
-      (let ((se (meaning-scone-element goal-value)))
-        (if (matches? se {query})
-            (progn
-              (setf *question* goal-value)
-              (answer-question))
-          (progn
-            (setf *last-parse-context* (context-of goal-value))
-            (setf *question* nil)
-            (setf *answer* nil)))))
-    (change-context *last-parse-context*)
-    goal-value))
-
-(defun get-agenda-values ()
-  "Get all values from the agenda
-
-   Used only for debugging"
-  (loop for v being the hash-values of *agenda* collect v))
-
-(defun get-chart-values ()
-  "Get all values from the chart
-
-   Used only for debugging"
-  (loop for v being the hash-values of *chart* collect v))
-
-(defun cons-that-mean (meaning)
-  "Get all matched constructions whose meanings are MEANING
-
-   Used only for debugging"
-  (remove-if-not
-   (lambda (value)
-     (and (matched-constructionp value)
-          (simple-is-x-eq-y? (meaning-scone-element value) meaning)))
-   (get-chart-values)))
-
-(defun con-that-means (meaning)
-  "Gets only the first matched construction whose meaning is MEANING
-
-   Useful when there's only one such matched construction. Used only for
-   debugging"
-  (first (cons-that-mean meaning)))
-
-;; allow for loading this file without warnings
 (unless (fboundp 'lispify)
   (defun lispify (goal-value)
     "Turn a matched construction into a Lisp list"
     (list goal-value) ; just to get rid of warning
     (error "LISPIFY function must be redefined inside grammar file!")))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;                           ;;;
+;;;     BEAM SEARCH LOGIC     ;;;
+;;;                           ;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(ql:quickload "split-sequence")
+
+;;; A state is defined as a list of matches-in-progress, or a single finished
+;;; construction (a potential final state)
+
+(defun current-match (node)
+  "Given a node, returns the current match of that node"
+  (first node))
+
+(defun replace-current-match (node replacement)
+  "Replace current match of node with something else"
+  (replace-head node replacement))
+
+(defun collapse (node)
+  "Collapse one layer of the node by feeding this mc to the match in the layer
+   before it"
+  (when (> 2 (length node)) (error "Nowhere to collapse to!"))
+  (replace-current-match (rest node)
+                         (continue-match (second node) (current-match node))))
+
+(defun continue-from (node continued-matches)
+  "Given the current node and a list of matches from which the last match would
+   be continued from, returns a list of all nodes from here"
+  (mapcar (lambda (match) (replace-current-match node match))
+          continued-matches))
+
+(defun expand-as-mc (node)
+  "If possible, expand a node by finishing the current match"
+  (let* ((m (current-match node))
+         (mc (and (can-be-completed? m) (make-matched-construction m))))
+    (when mc
+      (replace-current-match node mc))))
+
+(defun expand-tokens (node adj-meanings)
+  "Expand the specified node by continuing the previous match with the adjacent
+   meanings"
+  (let ((m (current-match node)))
+    (when (can-be-continued? m)
+      (continue-from node (continue-tokens m adj-meanings)))))
+
+(defun is-match-node? (node)
+  "Check to see if a node is a match node"
+  (matchp (current-match node)))
+
+(defun is-mc-node? (node)
+  "Check to see if a node is a matched construction node"
+  (matched-constructionp (current-match node)))
+
+(defun is-final-node? (node goal-start goal-end)
+  "Checks to see if a node is a final one"
+  (and (eq (length node) 1) (is-mc-node? node)
+       (let ((m (current-match node)))
+         (and (eq (start-of m) goal-start)
+              (eq (end-of m) goal-end)))))
+
+(defun from-mc (node)
+  "Given an mc node, find all the matches that can be continued with the top"
+  (continue-from node (continue-matches *new-matches* (current-match node))))
+
+(defun expand-from-match (node adj-meanings)
+  "Given a match node, find all ways of expanding it"
+  (append (make-appendable (expand-as-mc node))
+          (expand-tokens node adj-meanings)))
+
+(defun expand-from-mc (node)
+  "Given an mc node, find all ways of expanding it"
+  (append (make-appendable (collapse node)) (from-mc node)))
+
+(defun branches-of (node adj-meanings)
+  "Returns a list of states to go from here"
+  (cond ((is-match-node? node) (expand-from-match node adj-meanings))
+        ((is-mc-node? node) (expand-from-mc node))
+        (t (error "Unknown node type"))))
+
+(defun get-adj-meanings (node meanings-list)
+  "Get all meanings that begin at the same point the current node ends"
+  (nth (- (end-of (current-match node)) *sentence-position*) meanings-list))
+
+(defun node-score (node)
+  "Get the score of a node"
+  (get-score (current-match node)))
+
+(defun compare-nodes (n1 n2)
+  "See which node should go first in a list"
+  (> (node-score n1) (node-score n2)))
+
+(defun sort-nodes (nodes)
+  "Sort nodes by their confidence scores"
+  (sort nodes #'compare-nodes))
+
+(defun add-to-fringe (fringe new-nodes)
+  "Add some new nodes to the sorted fringe. Returns new sorted fringe"
+  (sort-nodes (append new-nodes (rest fringe))))
+
+(defun beam-search (fringe meanings-list)
+  "Given a list of meanings, tries to find a structured representation of
+   the entire list"
+  (when (null fringe) (error ""))
+  (let* ((best-node (first fringe))
+         (new-fringe
+          (add-to-fringe fringe
+           (branches-of best-node (get-adj-meanings best-node meanings-list))))
+         (new-best (first new-fringe)))
+    (if (is-final-node? new-best
+                        (start-of (first (first meanings-list)))
+                        (end-of (first (first (last meanings-list)))))
+        (current-match new-best)
+        (beam-search new-fringe meanings-list))))
+
+(defun setup-new-parse ()
+  "Reset everything for a fresh parse"
+  (change-context {general})
+
+  (setf *sentence-position* 0)
+  
+  (setf *new-matches* (start-match-against-constructions *constructions*))
+  (setf *isa-cache* (make-hash-table))
+  (setf *isa-cache-writes* 0)
+  (setf *isa-cache-reads* 0))
+
+(defun get-initial-states (meanings)
+  "Get the initial set of states to do beam search with. Each node is a state"
+  (let* ((meanings-cross-matches ; all meanings with all matches
+          (mapcar (lambda (meaning) (continue-matches *new-matches* meaning))
+                  meanings))
+         ;; single list
+         (meanings-x-matches (apply #'append meanings-cross-matches)))
+    (sort-nodes (mapcar #'list (remove-if #'null meanings-x-matches)))))
+
+(defun get-meanings-list (words)
+  "From a list of string words, get a list of possible meanings for each word"
+  (let ((word-pos *sentence-position*))
+    (mapcar (lambda (word)
+              (incf word-pos)
+              (get-string-meanings word (1- word-pos)))
+            words)))
+
 (defun nlu (sentence)
-  "Create a Lisp representation of a natural language sentence"
-  (when (zerop (hash-table-count *chart*))
+  "* Create a Lisp representation of a natural language sentence"
+  (when (zerop *sentence-position*)
     (setup-new-parse))
-  (let* ((word-list (split-sequence:split-sequence #\Space sentence))
-	 (parse-result (semiring-parse word-list *sentence-position*)))
-    (incf *sentence-position* (length word-list))
+  (let* ((words (split-sequence:split-sequence #\Space sentence))
+         (meanings-list (get-meanings-list words))
+	 (parse-result
+          (progn
+            (print-debug "MEANINGS-LIST: ~S" meanings-list)
+            (beam-search (get-initial-states (first meanings-list))
+                         meanings-list))))
+    (incf *sentence-position* (length words))
     (lispify parse-result)))
