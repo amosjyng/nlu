@@ -65,8 +65,11 @@
 (defvar *debug-goal-discovery* nil
   "Print all newly discovered potential goal values")
 
-(defvar *debug-nodes* nil
-  "Print all current nodes for beam search")
+(defvar *debug-search* nil
+  "Print search results into debug.html")
+
+(defvar *d-out* nil
+  "Variable for writing into the debug.html file")
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;                                   ;;;
@@ -99,6 +102,18 @@
      (format *error-output* ,statement ,@args)
      (format *error-output* "~%")))
 
+(defmacro print-debug-html (statement &rest args)
+  `(format *d-out* ,statement ,@args))
+
+(defun setup-debug-html ()
+  "Set up debugging output into the HTML file"
+  (setf *d-out* (open "debug.html" :direction :output :if-exists :supersede))
+  (print-debug-html "<html><body>"))
+
+(defun finish-debug-html ()
+  (print-debug-html "</body></html>")
+  (close *d-out*))
+
 (defun reload-matcher ()
   "Relaod this file
 
@@ -116,7 +131,7 @@
   (setf *debug-con-creation* t)
   (setf *debug-payload* t)
   (setf *debug-goal-discovery* t)
-  (setf *debug-nodes* t))
+  (setf *debug-search* t))
 
 (defun debug-none ()
   "Set all debug global variables to NIL, and make element names normal
@@ -128,7 +143,7 @@
   (setf *debug-con-creation* nil)
   (setf *debug-payload* nil)
   (setf *debug-goal-discovery* nil)
-  (setf *debug-nodes* nil))
+  (setf *debug-search* nil))
 
 (defun round-decimal (number shift)
   "Rounds a number to something"
@@ -697,6 +712,12 @@
       "."
       (format nil "[~d -> ~d]" (start-of range) (end-of range))))
 
+(defun get-range-html (range)
+  "Return an HTML string of the range"
+  (if (null (start-of range))
+      "<td>-</td><td>-</td>"
+      (format nil "<td>~d</td><td>~d</td>" (start-of range) (end-of range))))
+
 (defmethod print-object ((object construction) stream)
   "Show the pattern of a construction"
   (print-unreadable-object (object stream :type t)
@@ -727,6 +748,23 @@
   (format stream "<~S ~a ~S SCORE=~,2f>"
           (meaning-scone-element object) (get-range-string object)
           (meaning-attributes object) (get-meaning-score object)))
+
+(defgeneric object-html (object)
+  (:documentation "Convert an object to its HTML representation"))
+
+(defmethod object-html ((object construction))
+  "Show the pattern of a construction in HTML"
+  (print-debug-html "<tr>")
+  (loop for element in (get-construction-pattern object)
+       do (print-debug-html "<td>~S</td>" element))
+  (print-debug-html "</tr>"))
+
+(defun print-constructions-html ()
+  "Print an HTML table of all currently defined constructions"
+  (print-debug-html "<h2>Currently defined construction patterns</h2><table id=\"constructions\">")
+  (loop for construction in *constructions*
+       do (object-html construction))
+  (print-debug-html "</table>"))
 
 (defun copy-range (range)
   "Create a copy of a RANGE object."
@@ -1438,7 +1476,11 @@
   (setf *new-matches* (start-match-against-constructions *constructions*))
   (setf *isa-cache* (make-hash-table))
   (setf *isa-cache-writes* 0)
-  (setf *isa-cache-reads* 0))
+  (setf *isa-cache-reads* 0)
+
+  (when *debug-search*
+    (setup-debug-html)
+    (print-constructions-html)))
 
 (defun get-initial-states (meanings)
   "Get the initial set of states to do beam search with. Each node is a state"
