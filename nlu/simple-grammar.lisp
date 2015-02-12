@@ -219,6 +219,9 @@
      (* {entity modifier} modifiers)
      (= {entity} entity))
   
+  (let ((se (meaning-scone-element (first entity))))
+      (when (and (null article) (null modifiers) (indv-node? se))
+    (error "Recursively defining node ~S" se)))
   (let* ((existing-node (find-element-with article modifiers entity))
          (new-node
           (or existing-node
@@ -329,7 +332,6 @@
   ((= (:ends-in-. :atom {clause (grammatical entity)}) clause))
   
   (new-indv nil {sentence (grammatical entity)}))
-(setf (construction-score-multiplier sentence) 1.1)
 
 (defconstruction s-actions
   ((= (:structured {entity}) agent) (= (:list {action}) actions))
@@ -349,21 +351,21 @@
    (= {clause (grammatical entity)} clauses))
   
   (mapcar #'meaning-scone-element clauses))
-(setf (construction-score-multiplier clauses) 0.8)
+
 
 (defconstruction command
  ((? "please" discard) (= (:structured :present {action}) action))
 
  (new-statement {first person} {command} {second person}
 		:c (meaning-scone-element (first action))))
-(setf (construction-score-multiplier command) 1.1)
+
 
 (defconstruction ordered-command
   ((? "please" discard) (= (:structured {before}) ordered-action))
   
   (new-statement {first person} {command} {second person}
 		 :c (meaning-scone-element (first ordered-action))))
-(setf (construction-score-multiplier ordered-command) 1.3)
+
 
 (defmacro defordered-action (construction-name pattern)
   `(defconstruction ,construction-name
@@ -414,17 +416,6 @@
         (error "Definitions already exist for this string")))
   (new-indv nil {definition clause (grammatical entity)})) ; don't combine
 
-(defconstruction definition
-  ((= {indefinite article (grammatical entity)} discard)
-   (= (:unstructured {entity}) unknown)
-   (= "is" discard)
-   (= {indefinite article (grammatical entity)} discard)
-   (= (:unstructured {entity}) something-existing))
-
-  (let* ((unknown-thing (meaning-scone-element (first unknown)))
-	 (existing-meaning (meaning-scone-element (first something-existing))))
-    (new-is-a unknown-thing existing-meaning))
-  (new-indv nil {definition clause (grammatical entity)}))
 
 (defconstruction is-a-query
   ((= "is" discard)

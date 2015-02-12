@@ -148,6 +148,13 @@
     ((endp list) (list "Index too big!"))
     (t (cons (first list) (insert-at item (rest list) (1- index))))))
 
+(defun take (n list)
+  "Take the first N elements of a list. Returns entire list if list is less than
+   N elements long"
+  (if (> n (length list))
+      list
+      (subseq list 0 n)))
+
 (defun make-appendable (a)
   "If NIL, then return NIL. Otherwise return (a)"
   (if (null a)
@@ -1212,9 +1219,7 @@
                             :end (end-of new-match)
                             :components (match-so-far new-match)
                             :attributes (collect-match-attrs new-match)
-                            :score (* (match-score new-match)
-                                      (construction-score-multiplier
-                                       (get-match-construction new-match)))
+                            :score (match-score new-match)
                             :scone-element (run-payload new-match))
              (simple-error (se)
                (when *debug-con-creation*
@@ -1227,7 +1232,9 @@
 
 (defun start-match-against-construction (construction)
   "Start an empty match against a single construction"
-  (make-instance 'match :construction construction))
+  (make-instance 'match
+                 :construction construction
+                 :score (construction-score-multiplier construction)))
 
 (defun start-match-against-constructions (constructions)
   "Create a list of new MATCH objects, one for each CONSTRUCTION in the list"
@@ -1438,21 +1445,25 @@
 (defun beam-search (fringe meanings-list)
   "Given a list of meanings, tries to find a structured representation of
    the entire list"
-  (format t "Fringe is ~S~%" fringe)
+  (format t "~%~%~%Fringe is:~%")
+  (mapcar (lambda (node) (format t "==========~%~S~%" node))
+          fringe)
   (if (null fringe)
       nil
       (let* ((best-node (first fringe))
+             (neighbors (branches-of best-node
+                                     (get-adj-meanings best-node meanings-list)))
              (new-fringe
-              (add-to-fringe fringe
-                             (branches-of best-node
-                                          (get-adj-meanings best-node
-                                                            meanings-list))))
+              (add-to-fringe fringe neighbors))
              (new-best (first new-fringe)))
+        (format t "~~~~~~~~~~~%~~~~~~~~~~~%New neighbors are:~%")
+        (mapcar (lambda (node) (format t "----------~%~S~%" node))
+          neighbors)
         (if (is-final-node? new-best
                             (start-of (first (first meanings-list)))
                             (end-of (first (first (last meanings-list)))))
             (current-match new-best)
-            (beam-search new-fringe meanings-list)))))
+            (beam-search (take 5 new-fringe) meanings-list)))))
 
 (defun setup-new-parse ()
   "Reset everything for a fresh parse"
