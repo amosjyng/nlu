@@ -452,10 +452,11 @@
 (defmacro with-attrs (new-attrs &body body)
   "Macro for adding a new list of attributes (if they exist) to the ATTRS list
    and removing said attributes from the word"
-  `(let* ((attr-results (collect-attrs attrs ',new-attrs word))
-          (attrs (first attr-results))
-          (word (second attr-results)))
-     ,@body))
+  `(unless (stringp word)
+     (let* ((attr-results (collect-attrs attrs ',new-attrs word))
+            (attrs (first attr-results))
+            (word (second attr-results)))
+       ,@body)))
 
 (defun change-operator (new-operator element)
   "Change the operator of an element of a pattern. ELEMENT is assumed to be a
@@ -1277,6 +1278,17 @@
   (remove-if #'null
              (loop for match in matches collect (continue-match match token))))
 
+(defun cross (matches meanings)
+  "Form every possible continuation of a match by every single meaning"
+  (let* ((crossed (mapcar (lambda (meaning) (continue-matches matches meaning))
+                          meanings))
+         (non-null (remove-if #'null (apply #'append crossed))))
+    non-null))
+
+(defun start-new-matches-with (token)
+  "Start a completely new match with the given token"
+  (continue-matches *new-matches* token))
+
 (defun continue-tokens (match tokens)
   "Continue a single match with a list of tokens to continue with"
   (remove-if #'null
@@ -1371,10 +1383,16 @@
   "Replace current match of node with something else"
   (replace-head node replacement))
 
+(defun add-new-matches (node new-matches)
+  "Put new matches on top of the current node"
+  (mapcar (lambda (new-match) (cons new-match node))
+          new-matches))
+
 (defun collapse (node)
   "Collapse one layer of the node by feeding this mc to the match in the layer
    before it"
-  (when (> 2 (length node)) (error "Nowhere to collapse to!"))
+  (when (> 2 (length node))
+    (error (format nil "Nowhere to collapse to: ~S!" (length node))))
   (replace-current-match (rest node)
                          (continue-match (second node) (current-match node))))
 
@@ -1415,16 +1433,19 @@
 
 (defun from-mc (node)
   "Given an mc node, find all the matches that can be continued with the top"
-  (continue-from node (continue-matches *new-matches* (current-match node))))
+  (continue-from node (start-new-matches-with (current-match node))))
 
 (defun expand-from-match (node adj-meanings)
   "Given a match node, find all ways of expanding it"
   (append (make-appendable (expand-as-mc node))
-          (expand-tokens node adj-meanings)))
+          (expand-tokens node adj-meanings)
+          (add-new-matches node (cross *new-matches* adj-meanings))))
 
 (defun expand-from-mc (node)
   "Given an mc node, find all ways of expanding it"
-  (append (make-appendable (collapse node)) (from-mc node)))
+  (append (when (> (length node) 1)
+            (append (make-appendable (collapse node))))
+          (from-mc node)))
 
 (defun branches-of (node adj-meanings)
   "Returns a list of states to go from here"
@@ -1455,17 +1476,21 @@
 (defun beam-search (fringe meanings-list)
   "Given a list of meanings, tries to find a structured representation of
    the entire list"
-  (when (null fringe) (error ""))
-  (let* ((best-node (first fringe))
-         (new-fringe
-          (add-to-fringe fringe
-           (branches-of best-node (get-adj-meanings best-node meanings-list))))
-         (new-best (first new-fringe)))
-    (if (is-final-node? new-best
-                        (start-of (first (first meanings-list)))
-                        (end-of (first (first (last meanings-list)))))
-        (current-match new-best)
-        (beam-search new-fringe meanings-list))))
+  (format t "Fringe is ~S~%" fringe)
+  (if (null fringe)
+      nil
+      (let* ((best-node (first fringe))
+             (new-fringe
+              (add-to-fringe fringe
+                             (branches-of best-node
+                                          (get-adj-meanings best-node
+                                                            meanings-list))))
+             (new-best (first new-fringe)))
+        (if (is-final-node? new-best
+                            (start-of (first (first meanings-list)))
+                            (end-of (first (first (last meanings-list)))))
+            (current-match new-best)
+            (beam-search new-fringe meanings-list)))))
 
 (defun setup-new-parse ()
   "Reset everything for a fresh parse"
@@ -1484,12 +1509,7 @@
 
 (defun get-initial-states (meanings)
   "Get the initial set of states to do beam search with. Each node is a state"
-  (let* ((meanings-cross-matches ; all meanings with all matches
-          (mapcar (lambda (meaning) (continue-matches *new-matches* meaning))
-                  meanings))
-         ;; single list
-         (meanings-x-matches (apply #'append meanings-cross-matches)))
-    (sort-nodes (mapcar #'list (remove-if #'null meanings-x-matches)))))
+  (sort-nodes (mapcar #'list (cross *new-matches* meanings))))
 
 (defun get-meanings-list (words)
   "From a list of string words, get a list of possible meanings for each word"
