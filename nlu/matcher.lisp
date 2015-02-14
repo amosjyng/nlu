@@ -68,6 +68,10 @@
 (defvar *debug-nodes* nil
   "Print all current nodes for beam search")
 
+(defvar *debug-verify* nil
+  "Verify the correctness of a matched construction before continuing with the
+   parse")
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;                                   ;;;
 ;;;     GENERAL UTILITY FUNCTIONS     ;;;
@@ -1199,6 +1203,14 @@
           (handle-unmatched-token match next-token next-expected-token)))
     (error (format nil "Match ~S is already finished" match))))
 
+(defun verify (mc)
+  "Ask the user if the matched construction is the correct one"
+  (if (and mc *debug-verify*)
+      (progn
+        (format t "Is this construction correct? ~S" mc)
+        (y-or-n-p))
+      t))
+
 (defun make-matched-construction (new-match)
   "Returns a matched-construction from the completed match, and handles other
   side effects as well. Current, that means running the matched-construction
@@ -1228,7 +1240,7 @@
     (when matched-construction
       (setf (context-of matched-construction) *context*))
     (change-context *last-parse-context*)
-    matched-construction))
+    (and (verify matched-construction) matched-construction)))
 
 (defun start-match-against-construction (construction)
   "Start an empty match against a single construction"
