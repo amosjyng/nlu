@@ -45,6 +45,7 @@
   (x-is-a-y-of-z {table leg} {part} {table})
   (new-type {tool} {tangible})
   (new-type {screwdriver} {tool})
+  (new-type {bolt} {tangible})
   
   (new-type {indefinite article (grammatical entity)}
             {article (grammatical entity)})
@@ -72,6 +73,7 @@
   (new-type {short} {entity modifier})
 
   (new-type {pick up} {action} :english '(:no-iname :verb "pick"))
+  (new-type {screw in} {action} :english '(:no-iname :verb "screw"))
   (new-type {kick} {action} :english '(:no-iname :verb "kick"))
 
   (new-relation {command}
@@ -284,6 +286,7 @@
        new-node)))
 
 (defaction pick-up-x pick-x-up {pick up} "up")
+(defaction screw-in-x screw-x-in {screw in} "in")
 
 
 (defmacro deft-action (v-r-o v-o-to-r action)
