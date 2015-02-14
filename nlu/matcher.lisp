@@ -147,6 +147,10 @@
   (setf *debug-goal-discovery* nil)
   (setf *debug-nodes* nil))
 
+(defun average (list)
+  "Get the average of a list of numbers"
+  (/ (reduce #'+ list) (length list)))
+
 (defun round-decimal (number shift)
   "Rounds a number to something"
   (/ (round (* number shift)) shift))
@@ -1400,80 +1404,117 @@
 
 (ql:quickload "split-sequence")
 
+(defparameter *branches-count* nil
+  "Keep track of how many branches there are")
+
+(defclass node ()
+  ((stack
+    :documentation "A particular interpretation of the sentence"
+    :type list
+    :initarg :stack
+    :initform nil
+    :accessor node-stack)
+   (level
+    :documentation "How deep down we are"
+    :type integer
+    :initarg :level
+    :initform 0
+    :accessor node-level))
+  (:documentation
+   "A node in the search tree for the correct parse"))
+
+(defun make-node-from (m)
+  "Create a new Node from either a match or a matched construction"
+  (make-instance 'node :stack (list m) :level 0))
+
+(defun make-child (node new-stack)
+  "Create a new child Node with a custom stack"
+  (make-instance 'node :stack new-stack :level (1+ (node-level node))))
+
 ;;; A state is defined as a list of matches-in-progress, or a single finished
 ;;; construction (a potential final state)
 
-(defun current-match (node)
-  "Given a node, returns the current match of that node"
-  (first node))
+(defun current-top (node)
+  "Given a node, returns the current top of that node"
+  (first (node-stack node)))
 
-(defun replace-current-match (node replacement)
-  "Replace current match of node with something else"
-  (replace-head node replacement))
+(defun rest-stack (node)
+  "Get the rest of the stack of a node"
+  (rest (node-stack node)))
 
-(defun add-new-matches (node new-matches)
+(defun stack-length (node)
+  "Get the length of a node's stack"
+  (length (node-stack node)))
+
+(defun replace-current-top (node replacement)
+  "Create new node with new top"
+  (make-child node (replace-head (node-stack node) replacement)))
+
+(defun add-new-tops (node new-matches)
   "Put new matches on top of the current node"
-  (mapcar (lambda (new-match) (cons new-match node))
+  (mapcar (lambda (new-match)
+            (make-child node (cons new-match (node-stack node))))
           new-matches))
 
 (defun collapse (node)
   "Collapse one layer of the node by feeding this mc to the match in the layer
    before it"
-  (when (> 2 (length node))
-    (error (format nil "Nowhere to collapse to: ~S!" (length node))))
-  (let ((result (continue-match (second node) (current-match node))))
+  (when (> 2 (stack-length node))
+    (error (format nil "Nowhere to collapse to: ~S!" (stack-length node))))
+  (let* ((rest-stack (rest-stack node))
+         (result (continue-match (first rest-stack) (current-top node))))
     (when result
-      (replace-current-match (rest node) result))))
+      (make-child node (replace-head rest-stack result)))))
 
 (defun continue-from (node continued-matches)
   "Given the current node and a list of matches from which the last match would
    be continued from, returns a list of all nodes from here"
-  (mapcar (lambda (match) (replace-current-match node match))
+  (mapcar (lambda (match) (replace-current-top node match))
           continued-matches))
 
 (defun expand-as-mc (node)
   "If possible, expand a node by finishing the current match"
-  (let* ((m (current-match node))
+  (let* ((m (current-top node))
          (mc (and (can-be-completed? m) (make-matched-construction m))))
     (when mc
-      (replace-current-match node mc))))
+      (replace-current-top node mc))))
 
 (defun expand-tokens (node adj-meanings)
   "Expand the specified node by continuing the previous match with the adjacent
    meanings"
-  (let ((m (current-match node)))
+  (let ((m (current-top node)))
     (when (can-be-continued? m)
       (continue-from node (continue-tokens m adj-meanings)))))
 
 (defun is-match-node? (node)
   "Check to see if a node is a match node"
-  (matchp (current-match node)))
+  (matchp (current-top node)))
 
 (defun is-mc-node? (node)
   "Check to see if a node is a matched construction node"
-  (matched-constructionp (current-match node)))
+  (matched-constructionp (current-top node)))
 
 (defun is-final-node? (node goal-start goal-end)
   "Checks to see if a node is a final one"
-  (and (eq (length node) 1) (is-mc-node? node)
-       (let ((m (current-match node)))
+  (and (eq (stack-length node) 1) (is-mc-node? node)
+       (let ((m (current-top node)))
          (and (eq (start-of m) goal-start)
               (eq (end-of m) goal-end)))))
 
 (defun from-mc (node)
   "Given an mc node, find all the matches that can be continued with the top"
-  (continue-from node (start-new-matches-with (current-match node))))
+  (continue-from node (start-new-matches-with (current-top node))))
 
 (defun expand-from-match (node adj-meanings)
   "Given a match node, find all ways of expanding it"
   (append (make-appendable (expand-as-mc node))
           (expand-tokens node adj-meanings)
-          (when (can-be-continued? (current-match node))
-            (add-new-matches node (cross (new-matches) adj-meanings)))))
+          (when (can-be-continued? (current-top node))
+            (add-new-tops node (cross (new-matches) adj-meanings)))))
 
 (defun expand-from-mc (node)
   "Given an mc node, find all ways of expanding it"
-  (append (when (> (length node) 1)
+  (append (when (> (stack-length node) 1)
             (make-appendable (collapse node)))
           (from-mc node)))
 
@@ -1485,11 +1526,11 @@
 
 (defun get-adj-meanings (node meanings-list)
   "Get all meanings that begin at the same point the current node ends"
-  (nth (- (end-of (current-match node)) *sentence-position*) meanings-list))
+  (nth (- (end-of (current-top node)) *sentence-position*) meanings-list))
 
 (defun node-score (node)
   "Get the score of a node"
-  (get-score (current-match node)))
+  (get-score (current-top node)))
 
 (defun compare-nodes (n1 n2)
   "See which node should go first in a list"
@@ -1518,6 +1559,7 @@
            (new-fringe
             (add-to-fringe fringe neighbors))
            (new-best (first new-fringe)))
+      (setf *branches-count* (cons (length new-fringe) *branches-count*))
       (when *debug-nodes*
         (print-debug "~~~~~~~~~~~%~~~~~~~~~~~%New neighbors are:")
         (mapcar (lambda (node) (print-debug "----------~%~S" node))
@@ -1525,7 +1567,12 @@
       (if (is-final-node? new-best
                           (start-of (first (first meanings-list)))
                           (end-of (first (first (last meanings-list)))))
-          (current-match new-best)
+          (progn
+            (print-debug "Searched through ~S nodes. Solution is ~S levels deep. Average branching factor of ~2$"
+                         *n-searched* (node-level new-best)
+                         (if (null *branches-count*) 'UNDEFINED
+                             (average *branches-count*)))
+            (current-top new-best))
           (beam-search (take *search-queue-size* new-fringe)
                        meanings-list)))))
 
@@ -1541,7 +1588,7 @@
 
 (defun get-initial-states (meanings)
   "Get the initial set of states to do beam search with. Each node is a state"
-  (sort-nodes (mapcar #'list (cross (new-matches) meanings))))
+  (sort-nodes (mapcar #'make-node-from (cross (new-matches) meanings))))
 
 (defun get-meanings-list (words)
   "From a list of string words, get a list of possible meanings for each word"
@@ -1562,8 +1609,8 @@
             (when *debug-nodes*
               (print-debug "MEANINGS-LIST: ~S" meanings-list))
             (setf *n-searched* 0)
+            (setf *branches-count* nil)
             (beam-search (get-initial-states (first meanings-list))
                          meanings-list))))
     (incf *sentence-position* (length words))
-    (print-debug "Searched through ~S nodes" *n-searched*)
     (lispify parse-result)))
