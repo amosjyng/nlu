@@ -5,6 +5,6 @@
 (load-kb "core")
 (load "nlu/matcher")
 (setf *comment-on-element-creation* t)
-(load "nlu/simple-grammar")
+(load "nlu/grammars/simple/grammar")
 
 

@@ -4,6 +4,9 @@
    Used only for development"
   (load "nlu/grammar"))
 
+(setf *stats-filename* "nlu/grammars/simple/stats.lisp")
+(load-stats)
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;                           ;;;
 ;;;   GRAMMATICAL ENTITIES    ;;;
@@ -439,14 +442,6 @@
 
 (setup-new-parse)
 
-;;;;;;;;;;;;;;;;;;;;;;;;
-;;;                  ;;;
-;;;    DICTIONARY    ;;;
-;;;                  ;;;
-;;;;;;;;;;;;;;;;;;;;;;;;
-
-;;; set custom weights for words
-(load "nlu/simple-weights")
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;                       ;;;

@@ -52,6 +52,10 @@
   "Penalty for using a string as-is (e.g. as an unknown word) in place
    of a Scone element for a MEANING object")
 
+(defvar *stats-filename* ""
+  "The filename for grammar statistics (e.g. how often each meaning is invoked,
+   how often each construction is used, etc.).")
+
 ;;; DEBUGGING PARAMETERS
 (defvar *debug-isa-caching* nil
   "Print reads and updates to the *ISA-CACHE*")
@@ -234,7 +238,14 @@
     speech."))
 
 (defclass construction ()
-  ((elements
+  ((name
+    :documentation
+    "The symbolic Lisp variable name associated with this construction"
+    :type string
+    :initarg :name
+    :initform (error "Every construction must have a name!")
+    :reader c-name)
+   (elements
     :documentation
     "The actual list of elements that make up this construction pattern.
 
@@ -262,13 +273,18 @@
     :initform (error "You MUST provide the list of elements that forms this
      pattern")
     :reader get-construction-pattern)
-   (count
+   (success-count
     :documentation
-    "The number of times this pattern was successfully matched in
-     its entirety. Currently unused."
+    "The number of times this construction was correctly matched"
     :type integer
     :initform 0
-    :accessor pattern-count)
+    :accessor c-successes)
+   (failure-count
+    :documentation
+    "The number of times this construction was incorrectly matched"
+    :type integer
+    :initform 0
+    :accessor c-failures)
    (payload
     :documentation
     "The optional code which does something with the bindings
@@ -279,14 +295,7 @@
      is-a links to each of the adjectives in the noun phrase)."
     :type function
     :initarg :payload
-    :reader get-construction-payload)
-   (score-multiplier
-    :documentation
-    "What the score of the matched construction will be multiplied by, after
-     multiplying together the scores of all the constituent components"
-    :type number
-    :initform 1
-    :accessor construction-score-multiplier))
+    :reader get-construction-payload))
   (:documentation
    "A class that holds the patterns defining a particular
     CONSTRUCTION, the Scone type that this CONSTRUCTION represents, and a
@@ -367,6 +376,28 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (ql:quickload "alexandria")
+
+(defun construction-score-multiplier (c)
+  "Return the relative frequency of a construction"
+  (let ((s (1+ (c-successes c)))
+        (f (1+ (c-failures c))))
+    (+ 0.5 (/ s (+ s f)))))
+
+(defun load-stats ()
+  (when (probe-file *stats-filename*)
+    (load *stats-filename*)))
+
+(defun save-stats ()
+  (let ((stats (open *stats-filename*
+                     :direction :output
+                     :if-exists :supersede)))
+    (mapcar (lambda (c)
+              (format stats "~S~%"
+                      `(setf (c-successes ,(c-name c)) ,(c-successes c)))
+              (format stats "~S~%"
+                      `(setf (c-failures ,(c-name c)) ,(c-failures c))))
+            *constructions*)
+    (close stats)))
 
 (defvar *attribute-detection* nil
   "Assoc list of functions to check whether a string contains certain
@@ -611,6 +642,7 @@
   `(progn
      (defparameter ,construction-name
        (make-instance 'construction
+                      :name ',construction-name
                       :elements ',elements
                       :payload
                       (lambda (&key ,@(remove-duplicates
@@ -879,10 +911,6 @@
                        (payload-argument-list components)))
         (apply (get-construction-payload construction)
                (payload-argument-list components))))))
-
-(defun increment-pattern-count (construction)
-  "If a construction has been successfully matched, increment its count"
-  (incf (pattern-count construction)))
 
 (defun lossless-add-to-hash-table (key entry hash-table)
   "If ENTRY is non-NULL, adds ENTRY to the list of values associated with KEY
@@ -1211,6 +1239,13 @@
         (y-or-n-p))
       t))
 
+(defun update-c-stats (c outcome)
+  "Update the stats of a construction given the ultimate outcome of a match"
+  (when *debug-verify*
+    (if outcome
+      (incf (c-successes c))
+      (incf (c-failures c)))))
+
 (defun make-matched-construction (new-match)
   "Returns a matched-construction from the completed match, and handles other
   side effects as well. Current, that means running the matched-construction
@@ -1219,10 +1254,8 @@
   (unless (can-be-completed? new-match)
     (error (format nil "Trying to create construction from incomplete match ~S!"
                    new-match)))
-  ;; increment the number of times this particular pattern was matched
-  (increment-pattern-count (get-match-construction new-match)) 
   ;; create a new matched-construction from this match
-  (let ((matched-construction
+  (let ((mc
          (handler-case
              (make-instance 'matched-construction 
                             ;; same matched-construction rule
@@ -1237,10 +1270,12 @@
                (when *debug-con-creation*
                  (print-debug "~S" se)
                  nil)))))
-    (when matched-construction
-      (setf (context-of matched-construction) *context*))
+    (when mc
+      (setf (context-of mc) *context*))
     (change-context *last-parse-context*)
-    (and (verify matched-construction) matched-construction)))
+    (let ((outcome (verify mc)))
+      (update-c-stats (get-match-construction new-match) outcome)
+      mc)))
 
 (defun start-match-against-construction (construction)
   "Start an empty match against a single construction"
