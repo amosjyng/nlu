@@ -1212,16 +1212,13 @@
    match object that skips over some elements.
 
    Not destructive. Returns a copy of the original match."
-  (if (can-be-skipped? next-expected-token)
+  (when (can-be-skipped? next-expected-token)
     (let ((new-match (copy-match match)))
       (skip-element new-match next-expected-token)
       ;; STYLE warning here because CONTINUE-MATCH won't be defined yet, but
       ;; that's unavoidable since these two functions recursively call each
       ;; other
-      (continue-match new-match next-token))
-    (progn
-      (update-c-stats (get-match-construction match) nil)
-      nil)))
+      (continue-match new-match next-token))))
 
 (defun continue-match (match next-token)
   "Continue a previous partial match. If the NEXT-TOKEN satisfies the next part 
