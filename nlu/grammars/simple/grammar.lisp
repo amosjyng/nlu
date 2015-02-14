@@ -5,7 +5,6 @@
   (load "nlu/grammar"))
 
 (setf *stats-filename* "nlu/grammars/simple/stats.lisp")
-(load-stats)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;                           ;;;
@@ -441,6 +440,8 @@
   (new-indv nil {how query}))
 
 (setup-new-parse)
+
+(load-stats)
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
