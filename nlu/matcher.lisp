@@ -82,6 +82,9 @@
   "Verify the correctness of a matched construction before continuing with the
    parse")
 
+(defparameter *n-searched* 0
+  "How many nodes we've searched through")
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;                                   ;;;
 ;;;     GENERAL UTILITY FUNCTIONS     ;;;
@@ -1506,8 +1509,9 @@
 (defun beam-search (fringe meanings-list)
   "Given a list of meanings, tries to find a structured representation of
    the entire list"
-  (print-debug "~%~%~%Fringe is:~%")
-  (mapcar (lambda (node) (print-debug "==========~%~S~%" node))
+  (incf *n-searched*)
+  (print-debug "~%~%~%Fringe is:")
+  (mapcar (lambda (node) (print-debug "==========~%~S" node))
           fringe)
   (if (null fringe)
       nil
@@ -1517,8 +1521,8 @@
              (new-fringe
               (add-to-fringe fringe neighbors))
              (new-best (first new-fringe)))
-        (print-debug "~~~~~~~~~~~%~~~~~~~~~~~%New neighbors are:~%")
-        (mapcar (lambda (node) (print-debug "----------~%~S~%" node))
+        (print-debug "~~~~~~~~~~~%~~~~~~~~~~~%New neighbors are:")
+        (mapcar (lambda (node) (print-debug "----------~%~S" node))
           neighbors)
         (if (is-final-node? new-best
                             (start-of (first (first meanings-list)))
@@ -1558,7 +1562,9 @@
 	 (parse-result
           (progn
             (print-debug "MEANINGS-LIST: ~S" meanings-list)
+            (setf *n-searched* 0)
             (beam-search (get-initial-states (first meanings-list))
                          meanings-list))))
     (incf *sentence-position* (length words))
+    (print-debug "Searched through ~S nodes" *n-searched*)
     (lispify parse-result)))
