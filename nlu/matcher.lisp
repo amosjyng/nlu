@@ -56,6 +56,12 @@
   "The filename for grammar statistics (e.g. how often each meaning is invoked,
    how often each construction is used, etc.).")
 
+(defvar *learning* nil
+  "Dynamically from failures and successes in matching constructions")
+
+(defparameter *search-queue-size* 1000
+  "How big of a search queue to keep")
+
 ;;; DEBUGGING PARAMETERS
 (defvar *debug-isa-caching* nil
   "Print reads and updates to the *ISA-CACHE*")
@@ -606,6 +612,9 @@
   (:documentation
    "Returns the likelihood of this data being the intended
     meaning of the speaker"))
+
+(defmethod get-score ((data construction))
+  (construction-score-multiplier data))
 
 (defmethod get-score ((data meaning))
   (get-meaning-score data))
@@ -1201,13 +1210,16 @@
    match object that skips over some elements.
 
    Not destructive. Returns a copy of the original match."
-  (when (can-be-skipped? next-expected-token)
+  (if (can-be-skipped? next-expected-token)
     (let ((new-match (copy-match match)))
       (skip-element new-match next-expected-token)
       ;; STYLE warning here because CONTINUE-MATCH won't be defined yet, but
       ;; that's unavoidable since these two functions recursively call each
       ;; other
-      (continue-match new-match next-token))))
+      (continue-match new-match next-token))
+    (progn
+      (update-c-stats (get-match-construction match) nil)
+      nil)))
 
 (defun continue-match (match next-token)
   "Continue a previous partial match. If the NEXT-TOKEN satisfies the next part 
@@ -1241,7 +1253,7 @@
 
 (defun update-c-stats (c outcome)
   "Update the stats of a construction given the ultimate outcome of a match"
-  (when *debug-verify*
+  (when *learning*
     (if outcome
       (incf (c-successes c))
       (incf (c-failures c)))))
@@ -1277,11 +1289,11 @@
       (update-c-stats (get-match-construction new-match) outcome)
       mc)))
 
-(defun start-match-against-construction (construction)
+(defun start-match-against-construction (c)
   "Start an empty match against a single construction"
   (make-instance 'match
-                 :construction construction
-                 :score (construction-score-multiplier construction)))
+                 :construction c
+                 :score (get-score c)))
 
 (defun start-match-against-constructions (constructions)
   "Create a list of new MATCH objects, one for each CONSTRUCTION in the list"
@@ -1303,7 +1315,7 @@
 
 (defun start-new-matches-with (token)
   "Start a completely new match with the given token"
-  (continue-matches *new-matches* token))
+  (continue-matches (new-matches) token))
 
 (defun continue-tokens (match tokens)
   "Continue a single match with a list of tokens to continue with"
@@ -1332,8 +1344,9 @@
 (defvar *constructions* nil
     "List of all defined constructions")
 
-(defparameter *new-matches* (start-match-against-constructions *constructions*)
-  "List of new matches started from all constructions")
+(defun new-matches ()
+    "List of new matches started from all constructions"
+    (start-match-against-constructions *constructions*))
 
 (defparameter *last-parse-context* *context*
   "The context of the last successful parse")
@@ -1409,8 +1422,9 @@
    before it"
   (when (> 2 (length node))
     (error (format nil "Nowhere to collapse to: ~S!" (length node))))
-  (replace-current-match (rest node)
-                         (continue-match (second node) (current-match node))))
+  (let ((result (continue-match (second node) (current-match node))))
+    (when result
+      (replace-current-match (rest node) result))))
 
 (defun continue-from (node continued-matches)
   "Given the current node and a list of matches from which the last match would
@@ -1455,12 +1469,12 @@
   "Given a match node, find all ways of expanding it"
   (append (make-appendable (expand-as-mc node))
           (expand-tokens node adj-meanings)
-          (add-new-matches node (cross *new-matches* adj-meanings))))
+          (add-new-matches node (cross (new-matches) adj-meanings))))
 
 (defun expand-from-mc (node)
   "Given an mc node, find all ways of expanding it"
   (append (when (> (length node) 1)
-            (append (make-appendable (collapse node))))
+            (make-appendable (collapse node)))
           (from-mc node)))
 
 (defun branches-of (node adj-meanings)
@@ -1492,8 +1506,8 @@
 (defun beam-search (fringe meanings-list)
   "Given a list of meanings, tries to find a structured representation of
    the entire list"
-  (format t "~%~%~%Fringe is:~%")
-  (mapcar (lambda (node) (format t "==========~%~S~%" node))
+  (print-debug "~%~%~%Fringe is:~%")
+  (mapcar (lambda (node) (print-debug "==========~%~S~%" node))
           fringe)
   (if (null fringe)
       nil
@@ -1503,14 +1517,15 @@
              (new-fringe
               (add-to-fringe fringe neighbors))
              (new-best (first new-fringe)))
-        (format t "~~~~~~~~~~~%~~~~~~~~~~~%New neighbors are:~%")
-        (mapcar (lambda (node) (format t "----------~%~S~%" node))
+        (print-debug "~~~~~~~~~~~%~~~~~~~~~~~%New neighbors are:~%")
+        (mapcar (lambda (node) (print-debug "----------~%~S~%" node))
           neighbors)
         (if (is-final-node? new-best
                             (start-of (first (first meanings-list)))
                             (end-of (first (first (last meanings-list)))))
             (current-match new-best)
-            (beam-search (take 5 new-fringe) meanings-list)))))
+            (beam-search (take *search-queue-size* new-fringe)
+                         meanings-list)))))
 
 (defun setup-new-parse ()
   "Reset everything for a fresh parse"
@@ -1518,14 +1533,13 @@
 
   (setf *sentence-position* 0)
   
-  (setf *new-matches* (start-match-against-constructions *constructions*))
   (setf *isa-cache* (make-hash-table))
   (setf *isa-cache-writes* 0)
   (setf *isa-cache-reads* 0))
 
 (defun get-initial-states (meanings)
   "Get the initial set of states to do beam search with. Each node is a state"
-  (sort-nodes (mapcar #'list (cross *new-matches* meanings))))
+  (sort-nodes (mapcar #'list (cross (new-matches) meanings))))
 
 (defun get-meanings-list (words)
   "From a list of string words, get a list of possible meanings for each word"
