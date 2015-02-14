@@ -59,7 +59,7 @@
 (defvar *learning* nil
   "Dynamically from failures and successes in matching constructions")
 
-(defparameter *search-queue-size* 1000
+(defparameter *search-queue-size* 10000
   "How big of a search queue to keep")
 
 ;;; DEBUGGING PARAMETERS
@@ -488,11 +488,10 @@
 (defmacro with-attrs (new-attrs &body body)
   "Macro for adding a new list of attributes (if they exist) to the ATTRS list
    and removing said attributes from the word"
-  `(unless (stringp word)
-     (let* ((attr-results (collect-attrs attrs ',new-attrs word))
-            (attrs (first attr-results))
-            (word (second attr-results)))
-       ,@body)))
+  `(let* ((attr-results (collect-attrs attrs ',new-attrs word))
+          (attrs (first attr-results))
+          (word (second attr-results)))
+     ,@body))
 
 (defun change-operator (new-operator element)
   "Change the operator of an element of a pattern. ELEMENT is assumed to be a

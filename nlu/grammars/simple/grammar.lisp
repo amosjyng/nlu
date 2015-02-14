@@ -43,6 +43,8 @@
   (new-type {ball} {tangible})
   (new-type {window} {tangible})
   (x-is-a-y-of-z {table leg} {part} {table})
+  (new-type {tool} {tangible})
+  (new-type {screwdriver} {tool})
   
   (new-type {indefinite article (grammatical entity)}
             {article (grammatical entity)})
@@ -69,8 +71,8 @@
   (new-type {blue} {color})
   (new-type {short} {entity modifier})
 
-  (new-type {pick up} {action})
-  (new-type {kick} {action})
+  (new-type {pick up} {action} :english '(:no-iname :verb "pick"))
+  (new-type {kick} {action} :english '(:no-iname :verb "kick"))
 
   (new-relation {command}
                 :a-inst-of {entity}
