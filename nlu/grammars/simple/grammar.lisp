@@ -4,20 +4,17 @@
    Used only for development"
   (load "nlu/grammar"))
 
+(setf *stats-filename* "nlu/grammars/simple/stats.lisp")
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;                           ;;;
 ;;;   GRAMMATICAL ENTITIES    ;;;
 ;;;                           ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-;; allow this file to be loaded multiple times
 (unless (lookup-element {grammatical entity})
-  (load-kb "lexical-components/wordnet-concepts")
-  (load-kb "lexical-components/wordnet-english-names")
-  
   (new-type {grammatical entity} {thing})
-  (new-eq {entity} {entity.n.01})
-  (new-type {specific entity} {entity})
+  (new-indv {entity} {thing})
   (new-type {pronoun} {entity})
   (new-type {entity modifier} {thing})
   (new-type {article (grammatical entity)} {grammatical entity})
@@ -34,16 +31,18 @@
   (new-type {he} {pronoun})
   (new-type {she} {pronoun})
   (new-type {we} {pronoun})
-  (new-eq {first person} {first_person.n.01})
-  (new-eq {second person} {second_person.n.01})
+  (new-type {first person} {thing})
+  (new-type {second person} {thing})
   (new-eq {I}   {first person})
   (new-eq {me}  {first person})
   (new-eq {you} {second person})
 
-  (new-eq {physical_entity.n.01} {tangible})
-
-  (new-type {table leg} {leg.n.03} :english "leg")
-  (x-is-a-y-of-z {table leg} {part} {table.n.02})
+  (new-type {leg} {tangible})
+  (new-type {table} {tangible})
+  (new-type {table leg} {leg})
+  (new-type {ball} {tangible})
+  (new-type {window} {tangible})
+  (x-is-a-y-of-z {table leg} {part} {table})
   
   (new-type {indefinite article (grammatical entity)}
             {article (grammatical entity)})
@@ -64,13 +63,14 @@
 
   (new-indv {generic entity} {thing})
   
-  (new-is-a {large.a.01} {entity modifier})
-  (new-is-a {color.n.01} {entity modifier})
-  ;;(new-is-a {red.s.01} {entity modifier})
-  ;;(new-is-a {blue.s.01} {entity modifier})
-  (new-is-a {short.a.03} {entity modifier})
+  (new-type {large} {entity modifier})
+  (new-type {color} {entity modifier})
+  (new-type {red} {color})
+  (new-type {blue} {color})
+  (new-type {short} {entity modifier})
 
-  (english {pick_up.v.01} :verb "pick")
+  (new-type {pick up} {action})
+  (new-type {kick} {action})
 
   (new-relation {command}
                 :a-inst-of {entity}
@@ -220,28 +220,31 @@
     ((? {article (grammatical entity)} article)
      (* {entity modifier} modifiers)
      (= {entity} entity))
-
-    (let* ((existing-node (find-element-with article modifiers entity))
-           (new-node
-            (or existing-node
-                (ensure-indv-exists
-                 (meaning-scone-element (first entity))))))
-      (progn
-        (unless existing-node ; then create it
-          (mapcar (lambda (modifier)
-                    (new-is-a new-node (meaning-scone-element modifier)))
-                  modifiers)
-          ;; always make sure it's not treated as an adjective
-          ;; otherwise it'll be an {entity modifier} because it IS-A various
-          ;; entity modifiers
-          (new-is-not-a new-node {entity modifier})
-          (when ; we are referring to "an <object>"
-              (and (not (null article))
-                   (simple-is-x-a-y? (meaning-scone-element (first article))
-                                     {indefinite article (grammatical entity)}))
-            ;; then make this newly define object generic
-            (new-is-a new-node {generic entity})))
-        new-node)))
+  
+  (let ((se (meaning-scone-element (first entity))))
+      (when (and (null article) (null modifiers) (indv-node? se))
+    (error "Recursively defining node ~S" se)))
+  (let* ((existing-node (find-element-with article modifiers entity))
+         (new-node
+          (or existing-node
+              (ensure-indv-exists
+               (meaning-scone-element (first entity))))))
+    (progn
+      (unless existing-node ; then create it
+        (mapcar (lambda (modifier)
+                  (new-is-a new-node (meaning-scone-element modifier)))
+                modifiers)
+        ;; always make sure it's not treated as an adjective
+        ;; otherwise it'll be an {entity modifier} because it IS-A various
+        ;; entity modifiers
+        (new-is-not-a new-node {entity modifier})
+        (when ; we are referring to "an <object>"
+            (and (not (null article))
+                 (simple-is-x-a-y? (meaning-scone-element (first article))
+                                   {indefinite article (grammatical entity)}))
+          ;; then make this newly define object generic
+          (new-is-a new-node {generic entity})))
+      new-node)))
 
 (defconstruction subentity
   ((= (:unstructured {entity}) bigger-entity)
@@ -278,11 +281,8 @@
          (x-is-the-y-of-z action-object *action-object* new-node))
        new-node)))
 
-(defaction hammer-in-x hammer-x-in {hammer.v.01} "in")
-(defaction hammer-down-x hammer-x-down {hammer.v.01} "down")
-(defaction nail-down-x nail-x-down {nail.v.01} "down")
-(defaction pick-up-x pick-x-up {pick_up.v.01} "up")
-(defaction screw-in-x screw-x-in {screw.v.03} "in")
+(defaction pick-up-x pick-x-up {pick up} "up")
+
 
 (defmacro deft-action (v-r-o v-o-to-r action)
   `(defconstructions ,(list v-r-o v-o-to-r)
@@ -304,8 +304,6 @@
           (meaning-scone-element (first recipient))
           *action-recipient* new-node))
        new-node)))
-
-(deft-action hand-me-x hand-x-to-me {pass.v.05})
 
 (defconstruction verb-phrase
     ((= (:unstructured {action}) action)
@@ -336,7 +334,6 @@
   ((= (:ends-in-. :atom {clause (grammatical entity)}) clause))
   
   (new-indv nil {sentence (grammatical entity)}))
-(setf (construction-score-multiplier sentence) 1.1)
 
 (defconstruction s-actions
   ((= (:structured {entity}) agent) (= (:list {action}) actions))
@@ -356,21 +353,21 @@
    (= {clause (grammatical entity)} clauses))
   
   (mapcar #'meaning-scone-element clauses))
-(setf (construction-score-multiplier clauses) 0.8)
+
 
 (defconstruction command
  ((? "please" discard) (= (:structured :present {action}) action))
 
  (new-statement {first person} {command} {second person}
 		:c (meaning-scone-element (first action))))
-(setf (construction-score-multiplier command) 1.1)
+
 
 (defconstruction ordered-command
   ((? "please" discard) (= (:structured {before}) ordered-action))
   
   (new-statement {first person} {command} {second person}
 		 :c (meaning-scone-element (first ordered-action))))
-(setf (construction-score-multiplier ordered-command) 1.3)
+
 
 (defmacro defordered-action (construction-name pattern)
   `(defconstruction ,construction-name
@@ -421,17 +418,6 @@
         (error "Definitions already exist for this string")))
   (new-indv nil {definition clause (grammatical entity)})) ; don't combine
 
-(defconstruction definition
-  ((= {indefinite article (grammatical entity)} discard)
-   (= (:unstructured {entity}) unknown)
-   (= "is" discard)
-   (= {indefinite article (grammatical entity)} discard)
-   (= (:unstructured {entity}) something-existing))
-
-  (let* ((unknown-thing (meaning-scone-element (first unknown)))
-	 (existing-meaning (meaning-scone-element (first something-existing))))
-    (new-is-a unknown-thing existing-meaning))
-  (new-indv nil {definition clause (grammatical entity)}))
 
 (defconstruction is-a-query
   ((= "is" discard)
@@ -455,14 +441,8 @@
 
 (setup-new-parse)
 
-;;;;;;;;;;;;;;;;;;;;;;;;
-;;;                  ;;;
-;;;    DICTIONARY    ;;;
-;;;                  ;;;
-;;;;;;;;;;;;;;;;;;;;;;;;
+(load-stats)
 
-;;; set custom weights for words
-(load "nlu/weights")
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;                       ;;;
