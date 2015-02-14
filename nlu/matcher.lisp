@@ -1472,7 +1472,8 @@
   "Given a match node, find all ways of expanding it"
   (append (make-appendable (expand-as-mc node))
           (expand-tokens node adj-meanings)
-          (add-new-matches node (cross (new-matches) adj-meanings))))
+          (when (can-be-continued? (current-match node))
+            (add-new-matches node (cross (new-matches) adj-meanings)))))
 
 (defun expand-from-mc (node)
   "Given an mc node, find all ways of expanding it"
@@ -1510,26 +1511,27 @@
   "Given a list of meanings, tries to find a structured representation of
    the entire list"
   (incf *n-searched*)
-  (print-debug "~%~%~%Fringe is:")
-  (mapcar (lambda (node) (print-debug "==========~%~S" node))
-          fringe)
-  (if (null fringe)
-      nil
-      (let* ((best-node (first fringe))
-             (neighbors (branches-of best-node
-                                     (get-adj-meanings best-node meanings-list)))
-             (new-fringe
-              (add-to-fringe fringe neighbors))
-             (new-best (first new-fringe)))
+  (when *debug-nodes*
+    (print-debug "~%~%~%Fringe is:")
+    (mapcar (lambda (node) (print-debug "==========~%~S" node))
+            fringe))
+  (unless (null fringe)
+    (let* ((best-node (first fringe))
+           (neighbors (branches-of best-node
+                                   (get-adj-meanings best-node meanings-list)))
+           (new-fringe
+            (add-to-fringe fringe neighbors))
+           (new-best (first new-fringe)))
+      (when *debug-nodes*
         (print-debug "~~~~~~~~~~~%~~~~~~~~~~~%New neighbors are:")
         (mapcar (lambda (node) (print-debug "----------~%~S" node))
-          neighbors)
-        (if (is-final-node? new-best
-                            (start-of (first (first meanings-list)))
-                            (end-of (first (first (last meanings-list)))))
-            (current-match new-best)
-            (beam-search (take *search-queue-size* new-fringe)
-                         meanings-list)))))
+                neighbors))
+      (if (is-final-node? new-best
+                          (start-of (first (first meanings-list)))
+                          (end-of (first (first (last meanings-list)))))
+          (current-match new-best)
+          (beam-search (take *search-queue-size* new-fringe)
+                       meanings-list)))))
 
 (defun setup-new-parse ()
   "Reset everything for a fresh parse"
@@ -1561,7 +1563,8 @@
          (meanings-list (get-meanings-list words))
 	 (parse-result
           (progn
-            (print-debug "MEANINGS-LIST: ~S" meanings-list)
+            (when *debug-nodes*
+              (print-debug "MEANINGS-LIST: ~S" meanings-list))
             (setf *n-searched* 0)
             (beam-search (get-initial-states (first meanings-list))
                          meanings-list))))
