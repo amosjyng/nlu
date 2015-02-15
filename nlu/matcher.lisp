@@ -1559,7 +1559,7 @@
            (new-fringe
             (add-to-fringe fringe neighbors))
            (new-best (first new-fringe)))
-      (setf *branches-count* (cons (length new-fringe) *branches-count*))
+      (setf *branches-count* (cons (length neighbors) *branches-count*))
       (when *debug-nodes*
         (print-debug "~~~~~~~~~~~%~~~~~~~~~~~%New neighbors are:")
         (mapcar (lambda (node) (print-debug "----------~%~S" node))
