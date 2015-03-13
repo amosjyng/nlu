@@ -1433,6 +1433,11 @@
   (:documentation
    "A node in the search tree for the correct parse"))
 
+(defmethod print-object ((object node) stream)
+  "Show the pattern of a construction"
+  (print-unreadable-object (object stream :type t)
+    (format stream "~S" (node-stack object))))
+
 (defun make-node-from (m)
   "Create a new Node from either a match or a matched construction"
   (make-instance 'node :stack (list m) :level 0))
