@@ -116,6 +116,16 @@
      (format *error-output* ,statement ,@args)
      (format *error-output* "~%")))
 
+(defun setup-new-parse ()
+  "Reset everything for a fresh parse"
+  (change-context {general})
+
+  (setf *sentence-position* 0)
+  
+  (setf *isa-cache* (make-hash-table))
+  (setf *isa-cache-writes* 0)
+  (setf *isa-cache-reads* 0))
+
 (defun reload-matcher ()
   "Relaod this file
 
@@ -1576,16 +1586,6 @@
             (current-top new-best))
           (beam-search (take *search-queue-size* new-fringe)
                        meanings-list)))))
-
-(defun setup-new-parse ()
-  "Reset everything for a fresh parse"
-  (change-context {general})
-
-  (setf *sentence-position* 0)
-  
-  (setf *isa-cache* (make-hash-table))
-  (setf *isa-cache-writes* 0)
-  (setf *isa-cache-reads* 0))
 
 (defun get-initial-states (meanings)
   "Get the initial set of states to do beam search with. Each node is a state"
