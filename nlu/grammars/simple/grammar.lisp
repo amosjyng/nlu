@@ -2,7 +2,7 @@
   "Reload this grammar file
 
    Used only for development"
-  (load "nlu/grammar"))
+  (load "nlu/grammars/simple/grammar"))
 
 (setf *stats-filename* "nlu/grammars/simple/stats.lisp")
 
@@ -547,8 +547,9 @@
 (defun lispify (goal-value)
   "Turn a matched construction into a Lisp list"
   (when goal-value
-    (cond ((listp (meaning-scone-element goal-value))
-	   (mapcar #'lispify (meaning-scone-element goal-value)))
+    (cond ((not (matched-constructionp goal-value)) goal-value)
+          ((listp (meaning-scone-element goal-value))
+	   (cons :and (mapcar #'lispify (meaning-scone-element goal-value))))
 	  ((simple-is-x-a-y? (meaning-scone-element goal-value)
 			     {pronoun})
 	   (lispify-pronoun goal-value))
