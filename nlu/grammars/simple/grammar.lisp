@@ -40,6 +40,8 @@
   (new-type {leg} {tangible})
   (new-type {table} {tangible})
   (new-type {table leg} {leg})
+  (new-type {hammer} {tangible})
+  (new-type {nail} {tangible})
   (new-type {ball} {tangible})
   (new-type {window} {tangible})
   (x-is-a-y-of-z {table leg} {part} {table})
@@ -74,6 +76,7 @@
 
   (new-type {pick up} {action} :english '(:no-iname :verb "pick"))
   (new-type {screw in} {action} :english '(:no-iname :verb "screw"))
+  (new-type {hammer in} {action} :english '(:no-iname :verb "hammer"))
   (new-type {kick} {action} :english '(:no-iname :verb "kick"))
 
   (new-relation {command}
@@ -287,6 +290,7 @@
 
 (defaction pick-up-x pick-x-up {pick up} "up")
 (defaction screw-in-x screw-x-in {screw in} "in")
+(defaction hammer-in-x hammer-x-in {hammer in} "in")
 
 
 (defmacro deft-action (v-r-o v-o-to-r action)
