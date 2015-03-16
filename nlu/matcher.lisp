@@ -1580,18 +1580,19 @@
         (print-debug "~~~~~~~~~~~%~~~~~~~~~~~%New neighbors are:")
         (mapcar (lambda (node) (print-debug "----------~%~S" node))
                 neighbors))
-      (cond ((null new-best) nil)
-            ((is-final-node? new-best
-                             (start-of (first (first meanings-list)))
-                             (end-of (first (first (last meanings-list)))))
-             (progn
-               (print-debug "Searched through ~S nodes. Solution is ~S levels deep. Average branching factor of ~2$"
-                            *n-searched* (node-level new-best)
-                           (if (null *branches-count*) 'UNDEFINED
-                               (average *branches-count*)))
-               (current-top new-best)))
-            (t (beam-search (take *search-queue-size* new-fringe)
-                            meanings-list))))))
+      (if (or (null new-best)
+              (is-final-node? new-best
+                              (start-of (first (first meanings-list)))
+                              (end-of (first (first (last meanings-list))))))
+          (progn
+            (print-debug "Searched through ~S nodes. Solution is ~S levels deep. Average branching factor of ~2$"
+                         *n-searched*
+                         (unless (null new-best) (node-level new-best))
+                         (if (null *branches-count*) 'UNDEFINED
+                             (average *branches-count*)))
+            (when new-best (current-top new-best)))
+          (beam-search (take *search-queue-size* new-fringe)
+                       meanings-list)))))
 
 (defun get-initial-states (meanings)
   "Get the initial set of states to do beam search with. Each node is a state"
