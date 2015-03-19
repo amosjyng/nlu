@@ -52,6 +52,10 @@
   "Penalty for using a string as-is (e.g. as an unknown word) in place
    of a Scone element for a MEANING object")
 
+(defparameter *final-mc-modifier* 0.1
+  "How much to increase successes/decrease failures of a component construction
+   inside a final, finished parse by")
+
 (defvar *stats-filename* ""
   "The filename for grammar statistics (e.g. how often each meaning is invoked,
    how often each construction is used, etc.).")
@@ -1271,6 +1275,16 @@
       (incf (c-successes c))
       (incf (c-failures c)))))
 
+(defun learn-from-finished (mc)
+  "Give more weight to things inside a finished construction"
+  (when (and *learning* (matched-constructionp mc))
+    (let ((c (get-construction mc)))
+      (setf (c-successes c) (* (c-successes c) (+ 1 *final-mc-modifier*)))
+      (setf (c-failures c)  (* (c-failures c)  (- 1 *final-mc-modifier*))))
+    (loop for mc-list being the hash-values in
+         (get-matched-construction-components mc)
+       do (mapcar #'learn-from-finished mc-list))))
+
 (defun make-matched-construction (new-match)
   "Returns a matched-construction from the completed match, and handles other
   side effects as well. Current, that means running the matched-construction
@@ -1606,8 +1620,22 @@
               (get-string-meanings word (1- word-pos)))
             words)))
 
+(defun setup-next-parse (words)
+  "Given previous parse, ready globals for next parse"
+  (setf *n-searched* 0)
+  (setf *branches-count* nil)
+  (incf *sentence-position* (length words)))
+
+(defun print-parse-result (parse-result)
+  "Display the parse result in a natural way to the human user"
+  (if parse-result
+      (progn
+        (learn-from-finished parse-result)
+        (lispify parse-result))
+      (format t "Unable to understand.")))
+
 (defun nlu (sentence)
-  "* Create a Lisp representation of a natural language sentence"
+  "Create a Lisp representation of a natural language sentence"
   (when (zerop *sentence-position*)
     (setup-new-parse))
   (let* ((words (split-sequence:split-sequence #\Space sentence))
@@ -1616,11 +1644,7 @@
           (progn
             (when *debug-nodes*
               (print-debug "MEANINGS-LIST: ~S" meanings-list))
-            (setf *n-searched* 0)
-            (setf *branches-count* nil)
             (beam-search (get-initial-states (first meanings-list))
                          meanings-list))))
-    (incf *sentence-position* (length words))
-    (if parse-result
-        (lispify parse-result)
-        (format t "Unable to understand."))))
+    (setup-next-parse words)
+    (print-parse-result parse-result)))
