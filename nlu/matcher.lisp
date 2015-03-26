@@ -63,7 +63,7 @@
 (defvar *learning* nil
   "Dynamically from failures and successes in matching constructions")
 
-(defparameter *search-queue-size* 10000
+(defparameter *search-queue-size* 10
   "How big of a search queue to keep")
 
 ;;; DEBUGGING PARAMETERS
@@ -82,9 +82,9 @@
 (defvar *debug-nodes* nil
   "Print all current nodes for beam search")
 
-(defvar *debug-verify* nil
-  "Verify the correctness of a matched construction before continuing with the
-   parse")
+(defvar *interactive* nil
+  "Verify the correctness of the current state of the search before continuing
+   with the parse")
 
 (defparameter *n-searched* 0
   "How many nodes we've searched through")
@@ -120,15 +120,21 @@
      (format *error-output* ,statement ,@args)
      (format *error-output* "~%")))
 
+(defun setup-next-parse (words)
+  "Given previous parse, ready globals for next parse"
+  (setf *n-searched* 0)
+  (setf *branches-count* nil)
+  (incf *sentence-position* (length words)))
+
 (defun setup-new-parse ()
   "Reset everything for a fresh parse"
-  (change-context {general})
-
+    (change-context {general})
   (setf *sentence-position* 0)
-  
   (setf *isa-cache* (make-hash-table))
   (setf *isa-cache-writes* 0)
-  (setf *isa-cache-reads* 0))
+  (setf *isa-cache-reads* 0)
+
+  (setup-next-parse nil))
 
 (defun reload-matcher ()
   "Relaod this file
@@ -189,6 +195,16 @@
   (if (> n (length list))
       list
       (subseq list 0 n)))
+
+(defun choose-item (list)
+  "Have the user choose an item from the list"
+  (do ((remaining-list list (rest remaining-list))
+       (n 1 (1+ n)))
+      ((null remaining-list))
+    (format t "[~S] ~S~%" n (first remaining-list)))
+   (format t "Choose an item from the list: ")
+   (force-output t)
+   (nth (1- (read t)) list))
 
 (defun make-appendable (a)
   "If NIL, then return NIL. Otherwise return (a)"
@@ -1260,14 +1276,6 @@
           (handle-unmatched-token match next-token next-expected-token)))
     (error (format nil "Match ~S is already finished" match))))
 
-(defun verify (mc)
-  "Ask the user if the matched construction is the correct one"
-  (if (and mc *debug-verify*)
-      (progn
-        (format t "Is this construction correct? ~S" mc)
-        (y-or-n-p))
-      t))
-
 (defun update-c-stats (c outcome)
   "Update the stats of a construction given the ultimate outcome of a match"
   (when *learning*
@@ -1312,9 +1320,8 @@
     (when mc
       (setf (context-of mc) *context*))
     (change-context *last-parse-context*)
-    (let ((outcome (verify mc)))
-      (update-c-stats (get-match-construction new-match) outcome)
-      mc)))
+    (update-c-stats (get-match-construction new-match) mc)
+    mc))
 
 (defun start-match-against-construction (c)
   "Start an empty match against a single construction"
@@ -1587,7 +1594,9 @@
                                    (get-adj-meanings best-node meanings-list)))
            (new-fringe
             (add-to-fringe fringe neighbors))
-           (new-best (first new-fringe)))
+           (new-best (if *interactive*
+                         (choose-item new-fringe)
+                         (first new-fringe))))
       (unless (zerop (length neighbors))
         (setf *branches-count* (cons (length neighbors) *branches-count*)))
       (when *debug-nodes*
@@ -1619,12 +1628,6 @@
               (incf word-pos)
               (get-string-meanings word (1- word-pos)))
             words)))
-
-(defun setup-next-parse (words)
-  "Given previous parse, ready globals for next parse"
-  (setf *n-searched* 0)
-  (setf *branches-count* nil)
-  (incf *sentence-position* (length words)))
 
 (defun print-parse-result (parse-result)
   "Display the parse result in a natural way to the human user"
