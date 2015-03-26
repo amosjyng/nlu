@@ -1599,7 +1599,9 @@
                                        (list (choose-item adj-meanings))
                                        adj-meanings)))
            (new-fringe
-            (add-to-fringe fringe neighbors))
+            (if *interactive*
+                neighbors
+                (add-to-fringe fringe neighbors)))
            (new-best (first new-fringe)))
       (unless (zerop (length neighbors))
         (setf *branches-count* (cons (length neighbors) *branches-count*)))
@@ -1623,14 +1625,19 @@
 
 (defun get-initial-states (meanings)
   "Get the initial set of states to do beam search with. Each node is a state"
-  (sort-nodes (mapcar #'make-node-from (cross (new-matches) meanings))))
+  (sort-nodes (mapcar #'make-node-from
+                      (cross (new-matches)
+                             (if *interactive*
+                                 (list (choose-item meanings))
+                                 meanings)))))
 
 (defun get-meanings-list (words)
   "From a list of string words, get a list of possible meanings for each word"
   (let ((word-pos *sentence-position*))
     (mapcar (lambda (word)
               (incf word-pos)
-              (get-string-meanings word (1- word-pos)))
+              (remove-duplicates (get-string-meanings word (1- word-pos))
+                                 :test #'data-equalp))
             words)))
 
 (defun print-parse-result (parse-result)
