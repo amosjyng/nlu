@@ -198,13 +198,14 @@
 
 (defun choose-item (list)
   "Have the user choose an item from the list"
-  (do ((remaining-list list (rest remaining-list))
-       (n 1 (1+ n)))
-      ((null remaining-list))
-    (format t "[~S] ~S~%" n (first remaining-list)))
-   (format t "Choose an item from the list: ")
-   (force-output t)
-   (nth (1- (read t)) list))
+  (when list
+    (do ((remaining-list list (rest remaining-list))
+         (n 1 (1+ n)))
+        ((null remaining-list))
+      (format t "[~S] ~S~%" n (first remaining-list)))
+    (format t "Choose an item from the list: ") 
+    (force-output t)
+    (nth (1- (read t)) list)))
 
 (defun make-appendable (a)
   "If NIL, then return NIL. Otherwise return (a)"
@@ -1589,14 +1590,17 @@
     (mapcar (lambda (node) (print-debug "==========~%~S" node))
             fringe))
   (unless (null fringe)
-    (let* ((best-node (first fringe))
+    (let* ((best-node (if *interactive*
+                          (choose-item fringe)
+                          (first fringe)))
+           (adj-meanings (get-adj-meanings best-node meanings-list))
            (neighbors (branches-of best-node
-                                   (get-adj-meanings best-node meanings-list)))
+                                   (if *interactive*
+                                       (list (choose-item adj-meanings))
+                                       adj-meanings)))
            (new-fringe
             (add-to-fringe fringe neighbors))
-           (new-best (if *interactive*
-                         (choose-item new-fringe)
-                         (first new-fringe))))
+           (new-best (first new-fringe)))
       (unless (zerop (length neighbors))
         (setf *branches-count* (cons (length neighbors) *branches-count*)))
       (when *debug-nodes*
