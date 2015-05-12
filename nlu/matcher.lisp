@@ -30,6 +30,8 @@
 ;;; TODO:
 ;;; Allow for parsing CSG's.
 
+(ql:quickload "alexandria")
+(ql:quickload "cl-custom-hash-table")
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;                    ;;;
@@ -59,6 +61,11 @@
 (defvar *stats-filename* ""
   "The filename for grammar statistics (e.g. how often each meaning is invoked,
    how often each construction is used, etc.).")
+
+(defvar *concept-counts*
+  (cl-custom-hash-table:with-custom-hash-table
+      (make-hash-table :test #'simple-is-x-eq-y?))
+  "How often a concept occurs")
 
 (defvar *learning* nil
   "Dynamically from failures and successes in matching constructions")
@@ -419,8 +426,6 @@
 ;;;                                  ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(ql:quickload "alexandria")
-
 (defun construction-score-multiplier (c)
   "Return the relative frequency of a construction"
   (let ((s (1+ (c-successes c)))
@@ -441,6 +446,10 @@
               (format stats "~S~%"
                       `(setf (c-failures ,(c-name c)) ,(c-failures c))))
             *constructions*)
+    (loop for k being the hash-keys of *concept-counts*
+         using (hash-value v)
+       do (format stats "~S~%"
+                  `(setf (gethash ,k *concept-counts*) ,v)))
     (close stats)))
 
 (defvar *attribute-detection* nil
@@ -613,17 +622,12 @@
       (and (data-equalp (car data1) (car data2)) ; check two elements the same
            (data-equalp (cdr data1) (cdr data2)))))
 
-(defun hash-keys (hash-table)
-  "Get hash-keys from a hash-table
-
-   TODO: remove after installing Alexandria library"
-  (loop for key being the hash-keys of hash-table collect key))
-
 (defmethod data-equalp ((data1 hash-table) (data2 hash-table))
   "See if keys and values of two hash tables are equal
 
    TODO: replace with call to Alexandria library hash-table comparison function"
-  (and (equalp (hash-keys data1) (hash-keys data2))
+  (and (equalp (alexandria:hash-table-keys data1)
+               (alexandria:hash-table-keys data2))
        (data-equalp (alexandria:hash-table-keys data1)
                     (alexandria:hash-table-keys data2))
        (loop for key being the hash-keys in data1
@@ -1284,6 +1288,16 @@
       (incf (c-successes c))
       (incf (c-failures c)))))
 
+(defun update-meaning-stats (meaning outcome)
+  "Update the stats of a concept given the outcome of a match"
+  (when *learning*
+    (if outcome
+        (setf (gethash (meaning-scone-element meaning) *concept-counts*)
+              (1+ (or (gethash (meaning-scone-element meaning) *concept-counts*)
+                      1)))
+        ;; else do nothing for now
+        )))
+
 (defun learn-from-finished (mc)
   "Give more weight to things inside a finished construction"
   (when (and *learning* (matched-constructionp mc))
@@ -1363,6 +1377,10 @@
     (mapcar #'first
             (lookup-definitions str (list syntax-tag)))))
 
+(defun get-concept-score (concept)
+  "Get the relative score of a concept"
+  (gethash concept *concept-counts* 1))
+
 (defun exact-meanings (word position attributes &optional (syntax-tag :other))
   "Retrieve a list of all meanings associated with this exact string. The same
    set of attributes (e.g. plural, or ends in a period) will be assigned to each
@@ -1373,8 +1391,7 @@
          ;; as well as each concept of that syntax tag
          (loop for concept in (get-string-concepts word syntax-tag)
             collect (funcall #'define-meaning concept position (1+ position)
-                             attributes
-                             (or (get-element-property concept :score) 1)))))
+                             attributes (get-concept-score concept)))))
 
 (defvar *constructions* nil
     "List of all defined constructions")
@@ -1596,7 +1613,11 @@
            (adj-meanings (get-adj-meanings best-node meanings-list))
            (neighbors (branches-of best-node
                                    (if *interactive*
-                                       (list (choose-item adj-meanings))
+                                       (let ((chosen-item
+                                              (choose-item adj-meanings)))
+                                         (when chosen-item
+                                           (update-meaning-stats chosen-item t))
+                                         (list chosen-item))
                                        adj-meanings)))
            (new-fringe
             (if *interactive*
