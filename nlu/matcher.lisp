@@ -62,9 +62,13 @@
   "The filename for grammar statistics (e.g. how often each meaning is invoked,
    how often each construction is used, etc.).")
 
-(defvar *concept-counts*
-  (cl-custom-hash-table:with-custom-hash-table
-      (make-hash-table :test #'simple-is-x-eq-y?))
+(defun hash-concept (concept)
+  (sxhash (iname concept)))
+
+(cl-custom-hash-table:define-custom-hash-table-constructor make-ngram-ht
+    :test simple-is-x-eq-y? :hash-function hash-concept)
+
+(defvar *concept-counts* (make-ngram-ht)
   "How often a concept occurs")
 
 (defvar *learning* nil
