@@ -147,13 +147,23 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
+(defgeneric copy-instance (object &rest initargs)
+  (:documentation "Shallow copy OBJECT, with changes specified by INITARGS")
+  (:method ((object standard-object) &rest initargs)
+    (let* ((class (class-of object))
+           (copy (allocate-instance class)))
+      (dolist (slot-name (mapcar #'sb-mop:slot-definition-name
+                                 (sb-mop:class-slots class)))
+        (when (slot-boundp object slot-name)
+          (setf (slot-value copy slot-name) (slot-value object slot-name))))
+      (apply #'reinitialize-instance copy initargs))))
+
 (defclass span ()
   ((start :type integer :initarg :start :initform (error "No start")
           :reader start-of :documentation "Start position of a span")
    (end :type integer :initarg :end :initform (error "No end")
         :reader end-of :documentation "End position of a span"))
-  (:documentation
-   "Class that denotes a span across a sentence."))
+  (:documentation "Class that denotes a span across a sentence."))
 
 (defun span-arrow (span)
   "Returns a string representation of the span using an arrow"
@@ -175,9 +185,12 @@
 
 (defclass n-gram (span)
   ((text :type list :initarg :text :initform (error "0-gram") :reader text
-         :documentation "List of natural language tokens for this n-gram"))
-  (:documentation
-   "Class denoting a particular n-gram in a sentence."))
+         :documentation "List of natural language tokens for this n-gram")
+   (base :type list :initarg :base-form :reader base-form
+         :documentation "The base form of this n-gram")
+   (attrs :type list :initarg :attrs :reader attrs
+          :documentation "List of morphological attributes of this n-gram"))
+  (:documentation "Class denoting a particular n-gram in a sentence."))
 
 (defmethod print-object ((object n-gram) stream)
   "Print n-grams readably"
@@ -189,7 +202,7 @@
   (declare (list text) (integer start))
   (make-instance 'n-gram :text text :start start :end (+ start (length text))))
 
-(defun pre-process (sentence &optional (start 0))
+(defun pre-processor (sentence &optional (start 0))
   "Chop a sentence up into n-grams.
 
    Currently only returns a list of unigrams.
@@ -207,3 +220,9 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
+(defun morphological-engine (n-gram)
+  "Given an n-gram, separate the plaintext into base words and additional
+   morphological information.
+
+   TODO: actually do something about morphology"
+  (copy-instance n-gram :base-form (text n-gram) :attrs nil))
