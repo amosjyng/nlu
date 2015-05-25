@@ -148,7 +148,7 @@
 (defvar *default-stats-count* 1
   "Default count for non-existent stats")
 
-(defvar *elements-given-text* (make-hash-table)
+(defvar *elements-given-text* (make-hash-table :test 'equal)
   "Statistics for how often each n-gram is used to refer to each Scone
    element.")
 
@@ -221,7 +221,8 @@
   (if (null givens)
       stats
       (let ((key (first givens)))
-        (when (null (gethash key stats)) (sethash key (make-hash-table) stats))
+        (when (null (gethash key stats))
+          (sethash key (make-hash-table :test 'equal) stats))
         (get-universe (rest givens) (gethash key stats)))))
 
 (defun p (stats var &optional givens)
@@ -229,14 +230,24 @@
   (declare (hash-table stats) (list givens))
   (let* ((universe (get-universe givens stats))
          (total (reduce #'+ (get-values universe '(1))))
-         (this (gethash var stats *default-stats-count*)))
+         (this (gethash var universe *default-stats-count*)))
     (/ this total)))
 
 (defun 1+p (stats var &optional givens)
   "Increment the count of a var in stats by 1."
-  (let* ((universe (get-universe givens stats))
-         (current-count (gethash var universe 0)))
-    (setf current-count (1+ current-count))))
+  (declare (hash-table stats) (list givens))
+  (let* ((universe (get-universe givens stats)))
+    (sethash var (1+ (gethash var universe 0)) universe)))
+
+(defmacro defp (stats query-name update-name params)
+  "Macro that creates convenience functions for querying and updating
+   statistics."
+  (let ((p-args `(,stats var (list ,@params))))
+    `(progn
+       (defun ,query-name (var ,@params)
+         (p ,@p-args))
+       (defun ,update-name (var ,@params)
+         (1+p ,@p-args)))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -347,11 +358,7 @@
   "Create a meaning from an n-gram."
   (apply #'change-class (copy-instance n-gram) 'meaning rest))
 
-(defun p-e_t (element text)
-  "Utility function to obtain the probability of a meaning given a textual
-   representation of it."
-  (declare (element element) (list text))
-  (p *elements-given-text* element (list text)))
+(defp *elements-given-text* p-e_t 1+p-e_t (text))
 
 (defun meaning-creator (n-gram)
   "Given an n-gram, return a list of possible meanings that this n-gram refers
