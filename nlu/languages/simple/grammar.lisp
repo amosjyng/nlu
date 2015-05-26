@@ -4,7 +4,7 @@
       (= ({noun (grammar)}) entity)))
     
     ;; TODO: add paoyload
-    (let ((new-node (new-indv (first entity))))
+    (let ((new-node (new-indv nil (first entity))))
       ;; it is each of the modifiers that describe it
       (mapcar (lambda (modifier) (new-is-a new-node (scone-element modifier)))
               modifiers)
