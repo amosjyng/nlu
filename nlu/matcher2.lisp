@@ -172,6 +172,11 @@
   (declare (string language))
   (load (format nil "nlu/languages/~A.lisp" language)))
 
+(defun replace-head (new-head list)
+  "Replace head of a list with something else"
+  (declare (list list))
+  (cons new-head (rest list)))
+
 (defun sethash (key value hash-table)
   "A convenience function for overwriting the value of a key in a hash-table."
   (declare (hash-table hash-table))
@@ -370,3 +375,61 @@
                             :element entry
                             :confidence (p-e_t entry (text n-gram)))))
           (lookup-definitions (base-form n-gram))))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;
+;;;                 ;;;
+;;;     GRAMMAR     ;;;
+;;;                 ;;;
+;;;;;;;;;;;;;;;;;;;;;;;
+
+
+(defclass construction ()
+  ((patterns :type list :initarg :patterns :initform "No patterns"
+             :reader patterns :documentation
+             "List of syntactic-semantic forms that result in the same
+              meanings")
+   (payload :type function :initarg :payload :reader payload
+            :documentation "Lisp code to put the payload into Scone"))
+  (:documentation
+   "A class that represents meaning-form pairings (aka constructions) in a
+    particular language."))
+
+(defun expand-pattern (pattern)
+  "Pre-process a construction pattern."
+  (declare (list pattern))
+  (loop for element in pattern
+       when (equal '+ (first element))
+         collect (replace-head '= element) and collect (replace-head '* element)
+       else collect element))
+
+(defun make-construction (patterns payload)
+  "Create a new constrution object."
+  (declare (list patterns) (function payload))
+  (make-instance 'construction
+                 :patterns (mapcar #'expand-pattern patterns)
+                 :payload payload))
+
+(defun payload-arguments (patterns)
+  "Get a list of all possible payload arguments from the list of patterns."
+  (declare (list patterns))
+  (remove-duplicates
+   (apply #'append
+          (mapcar (lambda (pattern) (mapcar #'third pattern)) patterns))))
+
+(defmacro defconstruction (patterns &rest body)
+  (declare (list patterns))
+  (let ((arguments (payload-arguments patterns)))
+    `(make-construction ',patterns
+                        (lambda (&key ,@arguments)
+                          (declare ,@(loop for arg in arguments
+                                          collect `(ignorable ,arg)))
+                          ,@body))))
+
+;;;;;;;;;;;;;;;;;;;;;;;
+;;;                 ;;;
+;;;     MATCHER     ;;;
+;;;                 ;;;
+;;;;;;;;;;;;;;;;;;;;;;;
+
+
