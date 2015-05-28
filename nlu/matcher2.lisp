@@ -139,11 +139,14 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
+(defvar *constructions* nil
+  "List of currently-known constructions.")
+
 (defvar *stats-filename* nil
   "File to save and load statistics to/from.")
 
-(defvar *default-meaning-confidence* 1
-  "Default confidence value for meanings")
+(defvar *default-interpretation-confidence* 1
+  "Default confidence value for new interpretations.")
 
 (defvar *default-stats-count* 1
   "Default count for non-existent stats")
@@ -341,14 +344,18 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
-(defclass meaning (n-gram)
+(defclass interpretation ()
+  ((confidence :type number :initarg :confidence :reader confidence
+               :initform *default-interpretation-confidence*
+               :documentation
+               "Confidence that this is the interpretation of some text."))
+  (:documentation "Base case for anything to do with interpretation."))
+
+(defclass meaning (n-gram interpretation)
   ((element :type element :initarg :element :initform (error "No element")
             :reader scone-element
             :documentation "Scone element represented by this base n-gram")
-   (confidence :type number :initarg :confidence
-               :initform *default-meaning-confidence* :reader confidence
-               :documentation
-               "Confidence that this is the meaning of the n-gram"))
+   (confidence :initform *default-interpretation-confidence*))
   (:documentation
    "Wrapper around a Scone element providing meta-information about its role in
     the sentence."))
@@ -385,15 +392,20 @@
 
 
 (defclass construction ()
-  ((patterns :type list :initarg :patterns :initform "No patterns"
-             :reader patterns :documentation
-             "List of syntactic-semantic forms that result in the same
-              meanings")
+  ((name :type string :initarg :name :reader construction-name
+         :documentation "The string name for this construction.")
+   (pattern :type list :initarg :pattern :initform "No pattern"
+            :reader pattern :documentation "A natural-language form.")
    (payload :type function :initarg :payload :reader payload
             :documentation "Lisp code to put the payload into Scone"))
   (:documentation
    "A class that represents meaning-form pairings (aka constructions) in a
     particular language."))
+
+(defmethod print-object ((object construction) stream)
+  "Print constructions in a readable way"
+  (print-unreadable-object (object stream :type t)
+    (format stream "~A" (construction-name object))))
 
 (defun expand-pattern (pattern)
   "Pre-process a construction pattern."
@@ -403,28 +415,35 @@
          collect (replace-head '= element) and collect (replace-head '* element)
        else collect element))
 
-(defun make-construction (patterns payload)
+(defun make-construction (name pattern payload)
   "Create a new constrution object."
-  (declare (list patterns) (function payload))
-  (make-instance 'construction
-                 :patterns (mapcar #'expand-pattern patterns)
-                 :payload payload))
+  (declare (list pattern) (function payload))
+  (make-instance 'construction 
+                 :name name :pattern (expand-pattern pattern) :payload payload))
 
-(defun payload-arguments (patterns)
-  "Get a list of all possible payload arguments from the list of patterns."
-  (declare (list patterns))
-  (remove-duplicates
-   (apply #'append
-          (mapcar (lambda (pattern) (mapcar #'third pattern)) patterns))))
+(defun payload-arguments (pattern)
+  "Get a list of all possible payload arguments from a construction pattern."
+  (declare (list pattern))
+  (remove-duplicates (mapcar #'third pattern)))
 
-(defmacro defconstruction (patterns &rest body)
-  (declare (list patterns))
-  (let ((arguments (payload-arguments patterns)))
-    `(make-construction ',patterns
-                        (lambda (&key ,@arguments)
-                          (declare ,@(loop for arg in arguments
-                                          collect `(ignorable ,arg)))
-                          ,@body))))
+(defmacro make-payload (arguments payload-body)
+  "Create the payload function for a new construction."
+  (declare (list arguments payload-body))
+  `(lambda (&key ,@arguments)
+     (declare ,@(loop for arg in arguments collect `(ignorable ,arg)))
+     ,@payload-body))
+
+(defmacro defconstruction (name pattern &rest body)
+  "Macro for conveniently creating a new construction."
+  (declare (symbol name) (list pattern))
+  (let ((arguments (payload-arguments pattern))
+        (payload (gensym))
+        (new-construction (gensym)))
+    `(let* ((,payload (make-payload ,arguments ,body))
+            (,new-construction
+             (make-construction ,(symbol-name name) ',pattern ,payload)))
+       (defparameter ,name ,new-construction)
+       (setf *constructions* (cons ,new-construction *constructions*)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;
 ;;;                 ;;;
@@ -433,3 +452,15 @@
 ;;;;;;;;;;;;;;;;;;;;;;;
 
 
+(defclass match (span interpretation)
+  ((construction :type construction :initarg :construction
+                 :reader construction-being-matched
+                 :initform (error "No construction")
+                 :documentation "Construction being matched against.")
+   (bindings :type hashtable :initarg :bindings :reader bindings
+             :initform (make-hash-table :test 'equal)
+             :documentation "Matched meanings so far.")
+   (progress :type list :initarg :progress :reader progress :documentation
+             "Progress on matching each pattern of the construction.")
+   (confidence :initform *default-interpretation-confidence*))
+  (:documentation "An in-progress match of a construction's patterns."))
