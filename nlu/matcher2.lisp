@@ -155,6 +155,9 @@
   "Statistics for how often each n-gram is used to refer to each Scone
    element.")
 
+(defvar *constructions-given-elements* (make-hash-table :test 'equal)
+  "Statistics for how often each Scone element is used in each construction.")
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;                                   ;;;
@@ -213,14 +216,16 @@
   "Load learned statistics from disk."
   (when (probe-file *stats-filename*)
     (with-open-file (stats *stats-filename* :direction :input)
-      (setf *elements-given-text* (read stats)))))
+      (setf *elements-given-text* (read stats))
+      (setf *constructions-given-elements* (read stats)))))
 
 (defun save-stats ()
   "Save learned statistics to disk."
   (with-open-file (stats *stats-filename*
                          :direction :output :if-exists :supersede)
     (let ((*print-readably* t))
-      (print *elements-given-text* stats))))
+      (print *elements-given-text* stats)
+      (print *constructions-given-elements* stats))))
 
 (defun get-universe (givens stats)
   "Get the universe of possibilities from a list of givens. If it or its path
@@ -276,6 +281,16 @@
   "Sanity check to see if span has greater-than-zero length"
   (when (<= (end-of object) (start-of object)) (error "Start not after end!")))
 
+(defgeneric combine (span1 span2)
+  (:documentation "Combine two spans in some way to produce a third one. Second
+   one should be after first, and neither should overlap."))
+
+(defmethod combine ((span1 span) (span2 span))
+  "By default just combine the ranges of the two spans."
+  (if (> (end-of span1) (start-of span2))
+      (error "Span 1 is after 2")
+      (make-instance 'span :start (start-of span1) :end (end-of span2))))
+
 (defun span-arrow (span)
   "Returns a string representation of the span using an arrow"
   (declare (span span))
@@ -299,7 +314,7 @@
   "Print n-grams readably"
   (declare (stream stream))
   (print-unreadable-object (object stream)
-        (format stream "~A ~A" (span-arrow object) (text object))))
+    (format stream "~A ~A" (span-arrow object) (text object))))
 
 (defun make-n-gram (text start &rest rest)
   "Constructor for an n-gram given the text and start"
@@ -445,6 +460,7 @@
        (defparameter ,name ,new-construction)
        (setf *constructions* (cons ,new-construction *constructions*)))))
 
+
 ;;;;;;;;;;;;;;;;;;;;;;;
 ;;;                 ;;;
 ;;;     MATCHER     ;;;
@@ -457,10 +473,120 @@
                  :reader construction-being-matched
                  :initform (error "No construction")
                  :documentation "Construction being matched against.")
-   (bindings :type hashtable :initarg :bindings :reader bindings
-             :initform (make-hash-table :test 'equal)
+   (bindings :type list :initarg :bindings :reader bindings
+             :initform (error "No bindings set")
              :documentation "Matched meanings so far.")
-   (progress :type list :initarg :progress :reader progress :documentation
-             "Progress on matching each pattern of the construction.")
+   (progress :type integer :initarg :progress :reader progress :initform 0
+             :documentation "Progress on matching othe construction's pattern.")
    (confidence :initform *default-interpretation-confidence*))
   (:documentation "An in-progress match of a construction's patterns."))
+
+(defmethod print-object ((object match) stream)
+  (print-unreadable-object (object stream)
+    (format stream "~A ~A ~,2f" (span-arrow object) (bindings object)
+            (confidence object))))
+
+(defmethod pattern ((match match))
+  "The natural language form of the construction being matched."
+  (pattern (construction-being-matched match)))
+
+(defmethod bindings (construction)
+  "Get the initial bindings for a match that is to be created froom a
+   construction."
+  (mapcar #'list (payload-arguments (pattern construction))))
+
+(defgeneric matches? (actual expected)
+  (:documentation
+   "See if an actual item matches up with the expected one in a pattern."))
+
+(defmethod matches? (actual expected)
+  "By default, just check if they're equal. This is the case for strings."
+  (equal actual expected))
+
+(defmethod matches? (actual (expected list))
+  "If EXPECTED is a list, check that all elements are similarly matched."
+  (every #'matches? (make-list (length expected) :initial-element actual)
+         expected))
+
+(defmethod matches? (actual (expected element-iname))
+  "Convert EXPECTED to an ELEMENT first before comparing."
+  (let ((expected (lookup-element expected)))
+    (when expected (matches? actual expected))))
+
+(defmethod matches? ((actual element-iname) expected)
+  "Convert ACTUAL to an ELEMENT first before comparing."
+  (let ((actual (lookup-element actual)))
+    (when actual (matches? actual expected))))
+
+(defmethod matches? ((actual element) (expected element))
+  (simple-is-x-a-y? actual expected))
+
+(defmethod matches? ((actual meaning) (expected element))
+  (matches? (scone-element actual) expected))
+
+(defp *constructions-given-elements* p-c_e 1+p-c_e (element))
+
+(defun matchp (object)
+  "Is an object of the class MATCH?"
+  (typep object 'match))
+
+(defun completed? (match)
+  "Check to see if a match is fully completed."
+  (equal (progress match) (length (pattern match))))
+
+(defun 1+progress (progress operator)
+  "Depending on what the operator is, decides whether or not to increment the
+   progress."
+  (case operator
+    (* progress)
+    (otherwise (1+ progress))))
+
+(defun is-optional? (operator)
+  "Returns whether or not an operator is optional."
+  (member operator '(? *)))
+
+(defun match-helper (pattern progress actual)
+  "Continue the current pattern being matched, and return an update to the
+   bindings and update to progress."
+  (declare (meaning actual))
+  (destructuring-bind (operator expected binding) (nth progress pattern)
+    (cond ((matches? actual expected)
+           (list binding actual (1+progress progress operator)))
+          ((is-optional? operator)
+           (match-helper pattern (1+ progress) actual))
+          (t (list nil nil nil)))))
+
+(defun add-binding (binding actual bindings)
+  "Add a new binding to a copied list of existing ones."
+  (declare (symbol binding) (list bindings) (meaning actual))
+  (let* ((new-bindings (copy-alist bindings))
+         (result (assoc binding new-bindings)))
+    (setf (cdr result) (cons actual (cdr result)))
+    new-bindings))
+
+(defun make-match (construction actual)
+  "Create a match from a construction"
+  (declare (construction construction) (meaning actual))
+  (destructuring-bind (binding actual progress)
+      (match-helper (pattern construction) 0 actual)
+    (when binding
+      (make-instance 'match
+                     :start (start-of actual) :end (end-of actual)
+                     :construction construction :progress progress
+                     :bindings (add-binding binding actual
+                                            (bindings construction))
+                     :confidence (p-c_e construction (scone-element actual))))))
+
+(defmethod combine :around ((match match) (meaning meaning))
+  "Combine a partial match with a meaning to produce another partial match."
+  (destructuring-bind (binding meaning new-progress)
+      (match-helper (pattern match) (progress match) meaning)
+    (when binding
+      (let ((new-span (call-next-method))
+            (construction (construction-being-matched match)))
+        (change-class new-span 'match
+                      :construction construction
+                      :bindings (add-binding binding meaning (bindings match))
+                      :progress new-progress
+                      :confidence (* (confidence match) (confidence meaning)
+                                     (p-c_e construction (scone-element meaning))))))))

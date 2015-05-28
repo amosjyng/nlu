@@ -1,7 +1,7 @@
 (defconstruction NP
     ((? ({article (grammar)}) article)
-     (* ({adjective (grammar)}) modifiers)
-     (= ({noun (grammar)}) entity))
+     (* ({modifier}) modifiers)
+     (= ({entity}) entity))
     
     ;; TODO: add paoyload
     (let ((new-node (new-indv nil (first entity))))

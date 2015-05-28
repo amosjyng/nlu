@@ -7,3 +7,7 @@
            (MAKE-HASH-TABLE :TEST 'EQUAL :SIZE '16 :REHASH-SIZE '1.5
                             :REHASH-THRESHOLD '1.0 :WEAKNESS 'NIL)
            '((#.(LOOKUP-ELEMENT {kick}) . 3)))))) 
+#.(SB-IMPL::%STUFF-HASH-TABLE
+   (MAKE-HASH-TABLE :TEST 'EQUAL :SIZE '16 :REHASH-SIZE '1.5 :REHASH-THRESHOLD
+                    '1.0 :WEAKNESS 'NIL)
+   'NIL) 
