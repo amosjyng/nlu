@@ -193,6 +193,11 @@
   (declare (hash-table hash-table))
   (or (loop for v being the hash-values of hash-table collect v) default))
 
+(defun make-keyword (symbol)
+  "Convert a symbol to a keyword."
+  (declare (symbol symbol))
+  (intern (symbol-name symbol) "KEYWORD"))
+
 (defgeneric copy-instance (object &rest initargs)
   (:documentation "Shallow copy OBJECT, with changes specified by INITARGS")
   (:method ((object standard-object) &rest initargs)
@@ -290,6 +295,11 @@
   (if (> (end-of span1) (start-of span2))
       (error "Span 1 is after 2")
       (make-instance 'span :start (start-of span1) :end (end-of span2))))
+
+(defun span-lessp (span1 span2)
+  "Return T if one span is strictly before another"
+  (declare (span span1 span2))
+  (< (start-of span1) (start-of span2)))
 
 (defun span-arrow (span)
   "Returns a string representation of the span using an arrow"
@@ -439,7 +449,7 @@
 (defun payload-arguments (pattern)
   "Get a list of all possible payload arguments from a construction pattern."
   (declare (list pattern))
-  (remove-duplicates (mapcar #'third pattern)))
+  (remove-duplicates (mapcar #'operator pattern)))
 
 (defmacro make-payload (arguments payload-body)
   "Create the payload function for a new construction."
@@ -490,10 +500,21 @@
   "The natural language form of the construction being matched."
   (pattern (construction-being-matched match)))
 
-(defmethod bindings (construction)
+(defmethod bindings ((construction construction))
   "Get the initial bindings for a match that is to be created froom a
    construction."
   (mapcar #'list (payload-arguments (pattern construction))))
+
+(defmethod payload ((match match))
+  "Get the payload function of the construction of the match."
+  (payload (construction-being-matched match)))
+
+(defmethod text ((match match))
+  "Get the matched text of a partial MATCH."
+  (let* ((meanings (apply #'append (mapcar #'cdr (bindings match))))
+         (ordered-meanings (stable-sort meanings #'span-lessp))
+         (texts (mapcar #'text ordered-meanings)))
+    (apply #'append texts)))
 
 (defgeneric matches? (actual expected)
   (:documentation
@@ -545,6 +566,11 @@
   "Returns whether or not an operator is optional."
   (member operator '(? *)))
 
+(defun operator (part)
+  "Get the operator from one part of a pattern."
+  (declare (list part))
+  (third part))
+
 (defun match-helper (pattern progress actual)
   "Continue the current pattern being matched, and return an update to the
    bindings and update to progress."
@@ -558,7 +584,7 @@
 
 (defun add-binding (binding actual bindings)
   "Add a new binding to a copied list of existing ones."
-  (declare (symbol binding) (list bindings) (meaning actual))
+  (declare (symbolo binding) (list bindings) (meaning actual))
   (let* ((new-bindings (copy-alist bindings))
          (result (assoc binding new-bindings)))
     (setf (cdr result) (cons actual (cdr result)))
@@ -590,3 +616,34 @@
                       :progress new-progress
                       :confidence (* (confidence match) (confidence meaning)
                                      (p-c_e construction (scone-element meaning))))))))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;                          ;;;
+;;;     PAYLOAD EXECUTOR     ;;;
+;;;                          ;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+(defun payload-parameters (bindings)
+  "Given a list of matched bindings, create a list of argument parameters to
+   call the constructor with."
+  (declare (list bindings))
+  (apply #'append
+         (mapcar (lambda (binding) (list (make-keyword (car binding))
+                                         (cdr binding)))
+                 bindings)))
+
+(defun execute-payload (match)
+  "Run the payload function defined by the construction of this match."
+  (declare (match match))
+  (apply (payload match) (payload-parameters (bindings match))))
+
+(defun complete (match)
+  "Complete a match, if possible."
+  (declare (match match))
+  (cond ((completed? match)
+         (change-class (copy-instance match) 'meaning
+                       :text (text match) :element (execute-payload match)))
+        ((is-optional? (operator (nth (progress match) (pattern match))))
+         (complete (copy-instance match :progress (1+ (progress match)))))))
