@@ -432,6 +432,11 @@
   (print-unreadable-object (object stream :type t)
     (format stream "~A" (construction-name object))))
 
+(defun operator (part)
+  "Get the operator from one part of a pattern."
+  (declare (list part))
+  (third part))
+
 (defun expand-pattern (pattern)
   "Pre-process a construction pattern."
   (declare (list pattern))
@@ -566,11 +571,6 @@
   "Returns whether or not an operator is optional."
   (member operator '(? *)))
 
-(defun operator (part)
-  "Get the operator from one part of a pattern."
-  (declare (list part))
-  (third part))
-
 (defun match-helper (pattern progress actual)
   "Continue the current pattern being matched, and return an update to the
    bindings and update to progress."
@@ -584,7 +584,7 @@
 
 (defun add-binding (binding actual bindings)
   "Add a new binding to a copied list of existing ones."
-  (declare (symbolo binding) (list bindings) (meaning actual))
+  (declare (symbol binding) (list bindings) (meaning actual))
   (let* ((new-bindings (copy-alist bindings))
          (result (assoc binding new-bindings)))
     (setf (cdr result) (cons actual (cdr result)))
