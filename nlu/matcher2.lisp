@@ -85,7 +85,7 @@
 ;;;
 ;;; Raw text goes to the pre-processor, which segments it into n-grams.
 ;;;
-;;; N-grams go to the morphological engine, which uses the langauge grammar to
+;;; N-grams go to the morphological engine, which uses the language grammar to
 ;;; find all plausible derivations of root forms into the current word. These
 ;;; root forms, along with the extra morphological information contained in the
 ;;; original word, are output.
@@ -108,12 +108,12 @@
 ;;; When a pattern is fully matched, or a partial match can be made into a
 ;;; matched construction, the payload executor runs the payload (defined
 ;;; individually for each construction) on the matched meanings. Execution of
-;;; the payload can involve querying and/or updating the Scone KB. A matched
-;;; construction is output.
+;;; the payload can involve querying and/or updating the Scone KB. A new Scone
+;;; element is output from the payload.
 ;;;
-;;; A matched construction object inherits from meaning, and is added to the
-;;; list of meanings to be fed into the matcher. In this way, it is possible to
-;;; nest constructions within each other.
+;;; The output Scone element is added to the list of meanings waiting to be fed
+;;; into the matcher. In this way, it is possible to nest constructions within
+;;; each other.
 ;;;
 ;;; The parsing algorithm controls which meanings get fed to which partial
 ;;; matches in oder to produce the correct final interpretation of the sentence.
@@ -145,6 +145,9 @@
 (defvar *stats-filename* nil
   "File to save and load statistics to/from.")
 
+(defvar *beam-search-width* 5
+  "How many values to keep in a beam search at once.")
+
 (defvar *default-interpretation-confidence* 1
   "Default confidence value for new interpretations.")
 
@@ -173,6 +176,13 @@
       (format stream "#.~A" `(lookup-element ,(element-name object)))
       (call-next-method object stream)))
 
+(defun type-node (element)
+  "Get either the ELEMENT itself if it's a type, or its parent if it's an
+   INDV-NODE."
+  (declare (element element))
+  (cond ((type-node? element) element)
+        (t (parent-element element))))
+
 (defun load-language (language)
   "Load the dictionary, morphology, and constructions of a specified language."
   (declare (string language))
@@ -187,6 +197,14 @@
   "A convenience function for overwriting the value of a key in a hash-table."
   (declare (hash-table hash-table))
   (setf (gethash key hash-table) value))
+
+(defun addhash (key value hash-table &key (aggregate #'cons) (default nil))
+  "If VALUE is true, AGGREGATE it with the existing entry of KEY in HASH-TABLE
+   (or with DEFAULT if no existing entry)."
+  (declare (hash-table hash-table) (function aggregate))
+  (when value
+    (sethash key (funcall aggregate value (gethash key hash-table default))
+             hash-table)))
 
 (defun get-values (hash-table &optional default)
   "Get a list of all the values of a hash-table."
@@ -208,6 +226,16 @@
         (when (slot-boundp object slot-name)
           (setf (slot-value copy slot-name) (slot-value object slot-name))))
       (apply #'reinitialize-instance copy initargs))))
+
+(defmacro mapcar-append (func list)
+  "Call MAPCAR on a FUNC that produces a separate list for each element, and
+   append everything together."
+  `(apply #'append (mapcar ,func ,list)))
+
+(defun take (n list)
+  "Return first N elements of a list."
+  (cond ((> n (length list)) list)
+        (t (subseq list 0 n))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -286,6 +314,16 @@
   "Sanity check to see if span has greater-than-zero length"
   (when (<= (end-of object) (start-of object)) (error "Start not after end!")))
 
+(defun span-arrow (span)
+  "Returns a string representation of the span using an arrow"
+  (declare (span span))
+  (format nil "~S -> ~S" (start-of span) (end-of span)))
+
+(defmethod print-object ((object span) stream)
+  "Print spans readably"
+  (declare (stream stream))
+  (print-unreadable-object (object stream) (format stream (span-arrow object))))
+
 (defgeneric combine (span1 span2)
   (:documentation "Combine two spans in some way to produce a third one. Second
    one should be after first, and neither should overlap."))
@@ -296,20 +334,20 @@
       (error "Span 1 is after 2")
       (make-instance 'span :start (start-of span1) :end (end-of span2))))
 
+(defun span-length (span)
+  "Return the length of this span."
+  (declare (span span))
+  (- (end-of span) (start-of span)))
+
 (defun span-lessp (span1 span2)
-  "Return T if one span is strictly before another"
+  "Return true if one span is strictly before another."
   (declare (span span1 span2))
   (< (start-of span1) (start-of span2)))
 
-(defun span-arrow (span)
-  "Returns a string representation of the span using an arrow"
-  (declare (span span))
-  (format nil "~S -> ~S" (start-of span) (end-of span)))
-
-(defmethod print-object ((object span) stream)
-  "Print spans readably"
-  (declare (stream stream))
-  (print-unreadable-object (object stream) (format stream (span-arrow object))))
+(defun sort-spans (spans)
+  "Sort a list of spans."
+  (declare (list spans))
+  (stable-sort spans #'span-lessp))
 
 (defclass n-gram (span)
   ((text :type list :initarg :text :initform (error "0-gram") :reader text
@@ -376,6 +414,16 @@
                "Confidence that this is the interpretation of some text."))
   (:documentation "Base case for anything to do with interpretation."))
 
+(defun interpretation-greaterp (interp1 interp2)
+  "Return true if one interpretation is strictly more confident than another."
+  (declare (interpretation interp1 interp2))
+  (> (confidence interp1) (confidence interp2)))
+
+(defun sort-interpretations (interpretations)
+  "Sort a list of interpretations according to decreasing confidence."
+  (declare (list interpretations))
+  (stable-sort interpretations #'interpretation-greaterp))
+
 (defclass meaning (n-gram interpretation)
   ((element :type element :initarg :element :initform (error "No element")
             :reader scone-element
@@ -399,7 +447,7 @@
 
 (defun meaning-creator (n-gram)
   "Given an n-gram, return a list of possible meanings that this n-gram refers
-   to"
+   to."
   (declare (n-gram n-gram))
   (mapcar (lambda (result)
             (let ((entry (first result)))
@@ -419,6 +467,9 @@
 (defclass construction ()
   ((name :type string :initarg :name :reader construction-name
          :documentation "The string name for this construction.")
+   (element-type :type element :initarg :type :reader element-type
+                 :documentation
+                 "What kind of Scone element this construction produces.")
    (pattern :type list :initarg :pattern :initform "No pattern"
             :reader pattern :documentation "A natural-language form.")
    (payload :type function :initarg :payload :reader payload
@@ -431,6 +482,11 @@
   "Print constructions in a readable way"
   (print-unreadable-object (object stream :type t)
     (format stream "~A" (construction-name object))))
+
+(defun conditions (part)
+  "Get the list of conditions from one part of a pattern."
+  (declare (list part))
+  (second part))
 
 (defun operator (part)
   "Get the operator from one part of a pattern."
@@ -445,11 +501,11 @@
          collect (replace-head '= element) and collect (replace-head '* element)
        else collect element))
 
-(defun make-construction (name pattern payload)
+(defun make-construction (name element-type pattern payload)
   "Create a new constrution object."
-  (declare (list pattern) (function payload))
-  (make-instance 'construction 
-                 :name name :pattern (expand-pattern pattern) :payload payload))
+  (declare (list pattern) (element element-type) (function payload))
+  (make-instance 'construction :name name :type element-type
+                 :pattern (expand-pattern pattern) :payload payload))
 
 (defun payload-arguments (pattern)
   "Get a list of all possible payload arguments from a construction pattern."
@@ -463,15 +519,17 @@
      (declare ,@(loop for arg in arguments collect `(ignorable ,arg)))
      ,@payload-body))
 
-(defmacro defconstruction (name pattern &rest body)
+(defmacro defconstruction (name element-type-iname pattern &rest body)
   "Macro for conveniently creating a new construction."
-  (declare (symbol name) (list pattern))
-  (let ((arguments (payload-arguments pattern))
+  (declare (symbol name) (element-iname element-type-iname) (list pattern))
+  (let ((element-type (lookup-element element-type-iname))
+        (arguments (payload-arguments pattern))
         (payload (gensym))
         (new-construction (gensym)))
     `(let* ((,payload (make-payload ,arguments ,body))
             (,new-construction
-             (make-construction ,(symbol-name name) ',pattern ,payload)))
+             (make-construction ,(symbol-name name) ,element-type ',pattern
+                                ,payload)))
        (defparameter ,name ,new-construction)
        (setf *constructions* (cons ,new-construction *constructions*)))))
 
@@ -516,9 +574,9 @@
 
 (defmethod text ((match match))
   "Get the matched text of a partial MATCH."
-  (let* ((meanings (apply #'append (mapcar #'cdr (bindings match))))
-         (ordered-meanings (stable-sort meanings #'span-lessp))
-         (texts (mapcar #'text ordered-meanings)))
+  (let* ((meanings (mapcar-append #'cdr (bindings match)))
+         (sorted-meanings (sort-spans meanings))
+         (texts (mapcar #'text sorted-meanings)))
     (apply #'append texts)))
 
 (defgeneric matches? (actual expected)
@@ -550,6 +608,10 @@
 (defmethod matches? ((actual meaning) (expected element))
   (matches? (scone-element actual) expected))
 
+(defmethod matches? ((actual element) (expected (eql :type)))
+  "Ensure that it is a type node we're matching against."
+  (type-node? actual))
+
 (defp *constructions-given-elements* p-c_e 1+p-c_e (element))
 
 (defun matchp (object)
@@ -570,6 +632,11 @@
 (defun is-optional? (operator)
   "Returns whether or not an operator is optional."
   (member operator '(? *)))
+
+(defun next-match-part (match)
+  "Get the next part of the pattern to be matched."
+  (declare (match match))
+  (nth (progress match) (pattern match)))
 
 (defun match-helper (pattern progress actual)
   "Continue the current pattern being matched, and return an update to the
@@ -601,10 +668,15 @@
                      :construction construction :progress progress
                      :bindings (add-binding binding actual
                                             (bindings construction))
-                     :confidence (p-c_e construction (scone-element actual))))))
+                     :confidence (* (confidence actual)
+                                    (p-c_e (list construction binding)
+                                           (scone-element actual)))))))
 
 (defmethod combine :around ((match match) (meaning meaning))
-  "Combine a partial match with a meaning to produce another partial match."
+  "Combine a partial match with a meaning to produce another partial match.
+
+   TODO: Code reuse with MAKE-MATCH."
+  (when (completed? match) (error "Match is already completed!"))
   (destructuring-bind (binding meaning new-progress)
       (match-helper (pattern match) (progress match) meaning)
     (when binding
@@ -615,8 +687,17 @@
                       :bindings (add-binding binding meaning (bindings match))
                       :progress new-progress
                       :confidence (* (confidence match) (confidence meaning)
-                                     (p-c_e construction (scone-element meaning))))))))
+                                     (p-c_e (list construction binding)
+                                            (scone-element meaning))))))))
 
+(defmethod combine ((match match) (meanings list))
+  "Try to combine a match with a variety of meanings."
+  (mapcar (lambda (meaning) (combine match meaning)) meanings))
+
+(defmethod combine ((matches list) (meanings list))
+  "Try to combine a list of matches with a list of meanings."
+  (mapcar-append (lambda (match) (combine match meanings))
+                 meanings))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;                          ;;;
@@ -625,14 +706,17 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
+(defclass matched-construction (meaning match)
+  () ; no extra slots
+  (:documentation "A fully completed match of a construction."))
+
 (defun payload-parameters (bindings)
   "Given a list of matched bindings, create a list of argument parameters to
    call the constructor with."
   (declare (list bindings))
-  (apply #'append
-         (mapcar (lambda (binding) (list (make-keyword (car binding))
-                                         (cdr binding)))
-                 bindings)))
+  (mapcar-append (lambda (binding)
+                   (list (make-keyword (car binding)) (cdr binding)))
+                 bindings))
 
 (defun execute-payload (match)
   "Run the payload function defined by the construction of this match."
@@ -643,7 +727,164 @@
   "Complete a match, if possible."
   (declare (match match))
   (cond ((completed? match)
-         (change-class (copy-instance match) 'meaning
+         (change-class (copy-instance match) 'matched-construction
                        :text (text match) :element (execute-payload match)))
-        ((is-optional? (operator (nth (progress match) (pattern match))))
+        ((is-optional? (operator (next-match-part match)))
          (complete (copy-instance match :progress (1+ (progress match)))))))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;
+;;;                  ;;;
+;;;     LEARNING     ;;;
+;;;                  ;;;
+;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+(defgeneric update-stats (interpretation)
+  (:documentation
+   "Update learned statistics for an interpretation of something."))
+
+(defmethod update-stats ((meaning meaning))
+  (1+p-e_t (scone-element meaning) (text meaning)))
+
+(defmethod update-stats ((mc matched-construction))
+  (loop for (binding . values) in (bindings mc)
+       do (loop for value in values
+               do (1+p-c_e (list (construction-being-matched mc) binding)
+                           (type-node (scone-element value)))
+               do (update-stats value))))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;                           ;;;
+;;;     PARSING ALGORITHM     ;;;
+;;;                           ;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+(defstruct node stack level understandings)
+
+(defun make-node-from (m)
+  "Create a node from either a match or a matched construction"
+  (make-node :stack (list m) :level 0))
+
+(defun make-child (node new-stack)
+  "Create a new child node with a custom stack"
+  (declare (node node) (list new-stack))
+  (make-node :stack new-stack :level (1+ (node-level node))))
+
+(defun add-node-stack (node addition)
+  "Add something to a node's stack."
+  (declare (node node))
+  (make-child node (cons addition (node-stack node))))
+
+(defun replace-node-stack (node replacement)
+  "Replace the head of a node's stack with something else."
+  (declare (node node) (interpretation replacement))
+  (make-node :stack (replace-head replacement (node-stack node))
+             :level (1+ (node-level node))))
+
+(defun node-length (node)
+  "Get the length of a node's stack."
+  (length (node-stack node)))
+
+(defun collapse-node (node completion meanings-ht constructions)
+  "Feed the completion into the previous pattern."
+  (declare (node node) (matched-construction completion))
+  (when (> (node-length node) 2)
+    (destructuring-bind (previous-match . rest-stack) (node-stack node)
+      (declare (ignorable previous-match))
+      (continue-node (make-node :stack rest-stack :level (node-level node))
+                     (list completion) meanings-ht constructions))))
+
+(defun node-current (node)
+  "Get the current element at the top of a node's stack."
+  (first (node-stack node)))
+
+(defun outer-product (fn list1 list2)
+  "Take the outer product of two lists to produce a list of lists."
+  (declare (function fn) (list list1 list2))
+  (mapcar (lambda (e1) (mapcar (lambda (e2) (funcall fn e1 e2)) list2))
+          list1))
+
+(defun score (node)
+  "Get a confidence score for an entire node."
+  (reduce #'* (mapcar (lambda (si) (* (span-length si) (confidence si)))
+                      (node-stack node))))
+
+(defun node-greaterp (node1 node2)
+  "Returns whether one node should be before another or not."
+  (declare (node node1 node2))
+  (> (score node1) (score node2)))
+
+(defun sort-nodes (nodes)
+  "Sort a list of nodes according to their overall span and confidence."
+  (declare (list nodes))
+  (stable-sort nodes #'node-greaterp))
+
+(defun cull (nodes)
+  "Return only the most likely nodes."
+  (declare (list nodes))
+  (take *beam-search-width* (sort-nodes nodes)))
+
+(defun start-matches (constructions meanings)
+  "Produce all possible starts to a match."
+  (declare (list constructions meanings))
+  (let* ((cm-list (outer-product #'make-match constructions meanings)))
+    (apply #'append cm-list)))
+
+(defun start-nodes (constructions meanings &key from)
+  "Create search nodes for all possible matches."
+  (declare (list constructions meanings))
+  (let* ((new-matches (start-matches constructions meanings)))
+    (if from
+        (mapcar (lambda (new-match) (replace-node-stack from new-match))
+                new-matches)
+        (mapcar #'make-node-from new-matches))))
+
+(defun continue-node (node meanings meanings-ht
+                      &optional (constructions *constructions*))
+  "Find all continuations for a search node."
+  (declare (node node) (list meanings) (hash-table meanings-ht))
+  (let* ((match (first (node-stack node)))
+         (continued-matches (combine match meanings))
+         (completions (remove nil (mapcar #'complete continued-matches)))
+         (new-start-nodes (start-nodes constructions completions :from node))
+         (collapsed-nodes
+          (mapcar (lambda (completion)
+                    (collapse-node node completion meanings-ht constructions))
+                  completions))
+         (next-matches (remove-if #'completed? continued-matches))
+         (new-match-nodes
+          (mapcar (lambda (next-match) (replace-node-stack node next-match))
+                  next-matches)))
+    (append new-start-nodes collapsed-nodes new-match-nodes)))
+
+(defun continue-nodes (nodes &rest rest)
+  "Find the best continuations for a set of search nodes."
+  (cull (mapcar-append
+         (lambda (node) (apply #'continue-node node rest))
+         nodes)))
+
+(defun parsing-algorithm (meanings-ht nodes position until)
+  (if (= position until)
+      (node-stack (first nodes))
+      (let ((meanings (gethash position meanings-ht)))
+        (when meanings
+          (let ((result
+                 (parsing-algorithm meanings-ht
+                                    (continue-nodes nodes meanings meanings-ht)
+                                    (1+ position) until)))
+            (when result (update-stats result)))))))
+
+(defun understand (text &key (meanings-ht (make-hash-table :test 'equal)))
+  "Try to truly understand a piece of text."
+  (declare (string text))
+  (let* ((n-grams (pre-processor text))
+         (morph-n-grams (mapcar-append #'morphological-engine n-grams))
+         (meanings (mapcar-append #'meaning-creator morph-n-grams)))
+    (loop for meaning in meanings
+       do (addhash (start-of meaning) meaning meanings-ht))
+    (parsing-algorithm meanings-ht
+                       (start-nodes *constructions* (gethash 0 meanings-ht))
+                       0 (end-of (first (last n-grams))))))
