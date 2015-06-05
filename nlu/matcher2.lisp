@@ -709,7 +709,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;                          ;;;
-;;;     PAYLOAD EXECUTOR     ;;;
+;;;     PAYLOAD EXEoCUTOR     ;;;
 ;;;                          ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -799,11 +799,12 @@
 (defun collapse-node (node completion meanings-ht constructions)
   "Feed the completion into the previous pattern."
   (declare (node node) (matched-construction completion))
+  (addhash (start-of completion) completion meanings-ht)
   (when (> (node-length node) 2)
     (destructuring-bind (previous-match . rest-stack) (node-stack node)
       (declare (ignorable previous-match))
       (continue-node (make-node :stack rest-stack :level (node-level node))
-                     (list completion) meanings-ht constructions))))
+                     meanings-ht constructions))))
 
 (defun node-current (node)
   "Get the current element at the top of a node's stack."
@@ -841,21 +842,26 @@
   (let* ((cm-list (outer-product #'make-match constructions meanings)))
     (remove nil (apply #'append cm-list))))
 
-(defun start-nodes (constructions meanings &key from)
+(defun start-nodes (constructions meanings &key from on)
   "Create search nodes for all possible matches."
   (declare (list constructions meanings))
   (let* ((new-matches (start-matches constructions meanings)))
-    (if from
-        (mapcar (lambda (new-match) (replace-node-stack from new-match))
-                new-matches)
-        (mapcar #'make-node-from new-matches))))
+    (cond (from
+           (mapcar (lambda (new-match) (replace-node-stack from new-match))
+                   new-matches))
+          (on
+           (mapcar (lambda (new-match) (add-node-stack on new-match))
+                   new-matches))
+          (t (mapcar #'make-node-from new-matches)))))
 
 (defun continue-node (node meanings-ht
                       &optional (constructions *constructions*))
   "Find all continuations for a search node."
-  (declare (node node) (hash-table meanings-ht))
+  (declare (node node) (hash-table meanings-ht)
+           (list constructions))
   (let* ((match (first (node-stack node)))
          (meanings (gethash (end-of match) meanings-ht))
+         (ontop-nodes (start-nodes constructions meanings :on node))
          (continued-matches (remove nil (combine match meanings)))
          (completions (remove nil (mapcar #'complete continued-matches)))
          (new-start-nodes (start-nodes constructions completions :from node))
@@ -867,9 +873,7 @@
          (new-match-nodes
           (mapcar (lambda (next-match) (replace-node-stack node next-match))
                   next-matches)))
-    (loop for completion in completions do
-         (addhash (start-of completion) completion meanings-ht))
-    (append new-start-nodes collapsed-nodes new-match-nodes)))
+    (append ontop-nodes new-start-nodes collapsed-nodes new-match-nodes)))
 
 (defun continue-nodes (nodes &rest rest)
   "Find the best continuations for a set of search nodes."
