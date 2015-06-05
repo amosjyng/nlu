@@ -433,6 +433,10 @@
    "Wrapper around a Scone element providing meta-information about its role in
     the sentence."))
 
+(defun meaningp (object)
+  "Is an object of the class MEANING?"
+  (typep object 'meaning))
+
 (defmethod print-object ((object meaning) stream)
   "Print meanings readably"
   (print-unreadable-object (object stream)
@@ -868,15 +872,24 @@
   (cull (mapcar-append (lambda (node) (apply #'continue-node node rest))
                        nodes)))
 
+(defun goal-meaning? (meaning &key (start 0) until)
+  "See if a parsed meaning is the goal."
+  (declare (meaning meaning))
+  (and (= (start-of meaning) start) (= (end-of meaning) until)))
+
 (defun parsing-algorithm (meanings-ht nodes until)
-  (let* ((ns (node-stack (first nodes))))
-    (if (= (end-of (first ns)) until)
-        ns
-        (let ((result
-               (parsing-algorithm meanings-ht
-                                  (continue-nodes nodes meanings-ht)
-                                  until)))
-            (when result (update-stats result))))))
+  (when nodes
+    (or (loop for meaning in (gethash 0 meanings-ht)
+           when (goal-meaning? meaning :start 0 :until until)
+           return meaning)
+        (let* ((output (first (node-stack (first nodes)))))
+          (if (and (meaningp output) (= (end-of output) until))
+              output
+              (let ((result
+                     (parsing-algorithm meanings-ht
+                                        (continue-nodes nodes meanings-ht)
+                                        until)))
+                (when result (update-stats result))))))))
 
 (defun understand (text &key (meanings-ht (make-hash-table :test 'equal)))
   "Try to truly understand a piece of text."
