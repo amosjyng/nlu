@@ -842,11 +842,12 @@
                 new-matches)
         (mapcar #'make-node-from new-matches))))
 
-(defun continue-node (node meanings meanings-ht
+(defun continue-node (node meanings-ht
                       &optional (constructions *constructions*))
   "Find all continuations for a search node."
-  (declare (node node) (list meanings) (hash-table meanings-ht))
+  (declare (node node) (hash-table meanings-ht))
   (let* ((match (first (node-stack node)))
+         (meanings (gethash (end-of match) meanings-ht))
          (continued-matches (combine match meanings))
          (completions (remove nil (mapcar #'complete continued-matches)))
          (new-start-nodes (start-nodes constructions completions :from node))
@@ -858,24 +859,24 @@
          (new-match-nodes
           (mapcar (lambda (next-match) (replace-node-stack node next-match))
                   next-matches)))
+    (loop for completion in completions do
+         (addhash (start-of completion) completion meanings-ht))
     (append new-start-nodes collapsed-nodes new-match-nodes)))
 
 (defun continue-nodes (nodes &rest rest)
   "Find the best continuations for a set of search nodes."
-  (cull (mapcar-append
-         (lambda (node) (apply #'continue-node node rest))
-         nodes)))
+  (cull (mapcar-append (lambda (node) (apply #'continue-node node rest))
+                       nodes)))
 
-(defun parsing-algorithm (meanings-ht nodes position until)
-  (if (= position until)
-      (node-stack (first nodes))
-      (let ((meanings (gethash position meanings-ht)))
-        (when meanings
-          (let ((result
-                 (parsing-algorithm meanings-ht
-                                    (continue-nodes nodes meanings meanings-ht)
-                                    (1+ position) until)))
-            (when result (update-stats result)))))))
+(defun parsing-algorithm (meanings-ht nodes until)
+  (let* ((ns (node-stack (first nodes))))
+    (if (= (end-of (first ns)) until)
+        ns
+        (let ((result
+               (parsing-algorithm meanings-ht
+                                  (continue-nodes nodes meanings-ht)
+                                  until)))
+            (when result (update-stats result))))))
 
 (defun understand (text &key (meanings-ht (make-hash-table :test 'equal)))
   "Try to truly understand a piece of text."
@@ -887,4 +888,4 @@
        do (addhash (start-of meaning) meaning meanings-ht))
     (parsing-algorithm meanings-ht
                        (start-nodes *constructions* (gethash 0 meanings-ht))
-                       0 (end-of (first (last n-grams))))))
+                       (end-of (first (last n-grams))))))
