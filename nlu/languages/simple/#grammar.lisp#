@@ -34,4 +34,8 @@
                         `(defconstruction ,name ,type ,pattern ,@payload)))
                     ntps)))
 
-
+(defmacro defaction (action-x action-x-extra action-element extra)
+  "Create constructions for phrasal verbs."
+  `(defconstructions ,(list (list action-x action-element extra
+                                  `((= (,))))
+                            (list action-x-extra action-element))))

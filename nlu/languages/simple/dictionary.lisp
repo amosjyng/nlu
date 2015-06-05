@@ -9,4 +9,5 @@
 
 (new-type {kick} {action} :english '(:no-iname :verb "kick"))
 (new-type {screw} {action} :english '(:no-iname :verb "screw"))
+(new-type {screw in} {action} :english '(:no-iname :verb "screw in"))
 (new-type {bolt} {physical object})
