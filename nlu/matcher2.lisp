@@ -897,16 +897,12 @@
     (or (loop for meaning in (gethash 0 meanings-ht)
            when (goal-meaning? meaning :start 0 :until until)
            return meaning)
-        (let* ((output (first (node-stack (first nodes)))))
-          (if (and (meaningp output) (= (end-of output) until))
-              output
-              (let ((result
-                     (parsing-algorithm meanings-ht
-                                        (continue-nodes nodes meanings-ht)
-                                        until)))
-                (when result
-                  (update-stats result)
-                  result)))))))
+        (let ((result
+               (parsing-algorithm meanings-ht (continue-nodes nodes meanings-ht)
+                                  until)))
+          (when result
+            (update-stats result)
+            result)))))
 
 (defun understand (text &key (meanings-ht (make-hash-table :test 'equal)))
   "Try to truly understand a piece of text."
@@ -916,6 +912,12 @@
          (meanings (mapcar-append #'meaning-creator morph-n-grams)))
     (loop for meaning in meanings
        do (addhash (start-of meaning) meaning meanings-ht))
-    (parsing-algorithm meanings-ht
-                       (start-nodes *constructions* (gethash 0 meanings-ht))
-                       (end-of (first (last n-grams))))))
+    (let ((result
+           (parsing-algorithm meanings-ht
+                              (start-nodes *constructions*
+                                           (gethash 0 meanings-ht))
+                              (end-of (first (last n-grams))))))
+      (or result
+          (format t "Only understood: ~A"
+                  (loop for meanings being the hash-values of meanings-ht
+                       collect meanings))))))
