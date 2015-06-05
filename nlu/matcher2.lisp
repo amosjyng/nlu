@@ -560,8 +560,8 @@
 
 (defmethod print-object ((object match) stream)
   (print-unreadable-object (object stream)
-    (format stream "~A ~A ~,2f" (span-arrow object) (bindings object)
-            (confidence object))))
+    (format stream "~A progress=~A ~A ~,2f" (span-arrow object)
+            (progress object) (bindings object) (confidence object))))
 
 (defmethod pattern ((match match))
   "The natural language form of the construction being matched."
@@ -644,14 +644,18 @@
 
 (defun match-helper (pattern progress actual)
   "Continue the current pattern being matched, and return an update to the
-   bindings and update to progress."
-  (declare (meaning actual))
-  (destructuring-bind (operator expected binding) (nth progress pattern)
-    (cond ((matches? actual expected)
-           (list binding actual (1+progress progress operator)))
-          ((is-optional? operator)
-           (match-helper pattern (1+ progress) actual))
-          (t (list nil nil nil)))))
+   bindings and update to progress.
+
+  TODO: refactor so that values returned in same order as called"
+  (declare (meaning actual) (number progress) (meaning actual))
+  (if (>= progress (length pattern))
+      (list nil nil nil)
+      (destructuring-bind (operator expected binding) (nth progress pattern)
+        (cond ((matches? actual expected)
+               (list binding actual (1+progress progress operator)))
+              ((is-optional? operator)
+               (match-helper pattern (1+ progress) actual))
+              (t (list nil nil nil))))))
 
 (defun add-binding (binding actual bindings)
   "Add a new binding to a copied list of existing ones."
@@ -852,7 +856,7 @@
   (declare (node node) (hash-table meanings-ht))
   (let* ((match (first (node-stack node)))
          (meanings (gethash (end-of match) meanings-ht))
-         (continued-matches (combine match meanings))
+         (continued-matches (remove nil (combine match meanings)))
          (completions (remove nil (mapcar #'complete continued-matches)))
          (new-start-nodes (start-nodes constructions completions :from node))
          (collapsed-nodes
