@@ -109,9 +109,10 @@
 ;;; matched construction, the payload executor runs the payload (defined
 ;;; individually for each construction) on the matched meanings. Execution of
 ;;; the payload can involve querying and/or updating the Scone KB. A new Scone
-;;; element is output from the payload.
+;;; element is output from the payload and used to create a matched construction
+;;; (a subclass of meaning).
 ;;;
-;;; The output Scone element is added to the list of meanings waiting to be fed
+;;; The matched construction is added to the list of meanings waiting to be fed
 ;;; into the matcher. In this way, it is possible to nest constructions within
 ;;; each other.
 ;;;
