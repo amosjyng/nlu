@@ -834,7 +834,7 @@
 (defun cull (nodes)
   "Return only the most likely nodes."
   (declare (list nodes))
-  (take *beam-search-width* (sort-nodes nodes)))
+  (take *beam-search-width* (sort-nodes (remove nil nodes))))
 
 (defun start-matches (constructions meanings)
   "Produce all possible starts to a match."
