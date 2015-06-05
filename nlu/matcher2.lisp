@@ -605,7 +605,7 @@
 (defmethod matches? ((actual element) (expected element))
   (simple-is-x-a-y? actual expected))
 
-(defmethod matches? ((actual meaning) (expected element))
+(defmethod matches? ((actual meaning) expected)
   (matches? (scone-element actual) expected))
 
 (defmethod matches? ((actual element) (expected (eql :type)))
