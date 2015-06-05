@@ -677,7 +677,9 @@
                      :bindings (add-binding binding actual
                                             (bindings construction))
                      :confidence (* (confidence actual)
-                                    (p-c_e (list construction binding)
+                                    (p-c_e (list (construction-name
+                                                  construction)
+                                                 binding)
                                            (scone-element actual)))))))
 
 (defmethod combine :around ((match match) (meaning meaning))
@@ -695,7 +697,9 @@
                       :bindings (add-binding binding meaning (bindings match))
                       :progress new-progress
                       :confidence (* (confidence match) (confidence meaning)
-                                     (p-c_e (list construction binding)
+                                     (p-c_e (list (construction-name
+                                                   construction)
+                                                  binding)
                                             (scone-element meaning))))))))
 
 (defmethod combine ((match match) (meanings list))
@@ -757,8 +761,11 @@
 
 (defmethod update-stats ((mc matched-construction))
   (loop for (binding . values) in (bindings mc)
+       when values
        do (loop for value in values
-               do (1+p-c_e (list (construction-being-matched mc) binding)
+               do (1+p-c_e (list (construction-name
+                                  (construction-being-matched mc))
+                                 binding)
                            (type-node (scone-element value)))
                do (update-stats value))))
 
