@@ -835,7 +835,7 @@
   "Produce all possible starts to a match."
   (declare (list constructions meanings))
   (let* ((cm-list (outer-product #'make-match constructions meanings)))
-    (apply #'append cm-list)))
+    (remove nil (apply #'append cm-list))))
 
 (defun start-nodes (constructions meanings &key from)
   "Create search nodes for all possible matches."
@@ -889,7 +889,9 @@
                      (parsing-algorithm meanings-ht
                                         (continue-nodes nodes meanings-ht)
                                         until)))
-                (when result (update-stats result))))))))
+                (when result
+                  (update-stats result)
+                  result)))))))
 
 (defun understand (text &key (meanings-ht (make-hash-table :test 'equal)))
   "Try to truly understand a piece of text."
