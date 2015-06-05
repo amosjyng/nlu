@@ -807,11 +807,10 @@
   "Feed the completion into the previous pattern."
   (declare (node node) (matched-construction completion))
   (addhash (start-of completion) completion meanings-ht)
-  (when (> (node-length node) 2)
-    (destructuring-bind (previous-match . rest-stack) (node-stack node)
-      (declare (ignorable previous-match))
-      (continue-node (make-node :stack rest-stack :level (node-level node))
-                     meanings-ht constructions))))
+  (when (> (node-length node) 1)
+    (continue-node (make-node :stack (rest (node-stack node))
+                              :level (node-level node))
+                   meanings-ht constructions)))
 
 (defun node-current (node)
   "Get the current element at the top of a node's stack."
@@ -873,9 +872,10 @@
          (completions (remove nil (mapcar #'complete continued-matches)))
          (new-start-nodes (start-nodes constructions completions :from node))
          (collapsed-nodes
-          (mapcar (lambda (completion)
-                    (collapse-node node completion meanings-ht constructions))
-                  completions))
+          (mapcar-append
+           (lambda (completion)
+             (collapse-node node completion meanings-ht constructions))
+           completions))
          (next-matches (remove-if #'completed? continued-matches))
          (new-match-nodes
           (mapcar (lambda (next-match) (replace-node-stack node next-match))
