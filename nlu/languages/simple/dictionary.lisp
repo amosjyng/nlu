@@ -7,6 +7,13 @@
 (new-indv {a (article)} {article (grammar)} :english "a")
 (new-indv {an (article)} {article (grammar)} :english "an")
 
+(new-type {colored thing} {tangible} :english :no-iname)
+(new-is-a {colored thing} {modifier})
+(new-type {red thing} {colored thing} :english '(:no-iname :adj "red"))
+(new-type {sizable thing} {tangible} :english :no-iname)
+(new-is-a {sizable thing} {modifier})
+(new-type {big thing} {sizable thing} :english '(:no-iname :adj "big" "large"))
+
 (new-type {kick} {action} :english '(:no-iname :verb "kick"))
 (new-type {screw} {action} :english '(:no-iname :verb "screw"))
 (new-type {screw in} {action} :english '(:no-iname :verb "screw in"))
