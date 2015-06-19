@@ -18,14 +18,17 @@
     ;; return the newly created node
     new-node))
 
-(defconstruction VP {action}
-  ((= (:type {action}) action) (? ({entity}) theme))
-  
-  (let ((action-element (ensure-indv-exists (scone-element (first action)))))
+(defun v-payload (action-element theme)
+  (let ((action-element (ensure-indv-exists action-element)))
     (unless (null theme)
       (x-is-the-y-of-z (scone-element (first theme)) *action-object*
                        action-element))
     action-element))
+
+(defconstruction VP {action}
+  ((= (:type {action}) action) (? ({entity}) theme))
+  
+  (v-payload (scone-element (first action)) theme))
 
 (defmacro defconstructions (ntps &rest payload)
   "Create multiple pairs of forms with the same meaning."
@@ -34,4 +37,13 @@
                         `(defconstruction ,name ,type ,pattern ,@payload)))
                     ntps)))
 
+(defmacro defaction (name1 name2 action-se object-se str1 str2)
+  "Create two constructions for phrasal verbs."
+  `(defconstructions
+       ((,name1 ,action-se
+                ((= ,str1 discard) (= ,str2 discard) (= ,object-se theme)))
+        (,name2 ,action-se
+                ((= ,str1 discard) (= ,object-se theme) (= ,str2 discard))))
+       (v-payload (lookup-element ,action-se) theme)))
 
+(defaction screw-in-x screw-x-in {screw in} {tangible} "screw" "in")

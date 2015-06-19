@@ -450,16 +450,22 @@
 
 (defp *elements-given-text* p-e_t 1+p-e_t (text))
 
+(new-indv {syntactic thing} {thing} :english :no-iname)
+
 (defun meaning-creator (n-gram)
   "Given an n-gram, return a list of possible meanings that this n-gram refers
    to."
   (declare (n-gram n-gram))
-  (mapcar (lambda (result)
-            (let ((entry (first result)))
-              (make-meaning n-gram
-                            :element entry
-                            :confidence (p-e_t entry (text n-gram)))))
-          (lookup-definitions (base-form n-gram))))
+  (append
+   (mapcar (lambda (result)
+             (let ((entry (first result)))
+               (make-meaning n-gram
+                             :element entry
+                             :confidence (p-e_t entry (text n-gram)))))
+           (lookup-definitions (base-form n-gram)))
+   (list (make-meaning n-gram
+                       :element (lookup-element {syntactic thing})
+                       :confidence *default-interpretation-confidence*))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;
@@ -611,7 +617,10 @@
   (simple-is-x-a-y? actual expected))
 
 (defmethod matches? ((actual meaning) expected)
-  (matches? (scone-element actual) expected))
+  (let ((element (scone-element actual)))
+    (if (simple-is-x-eq-y? element {syntactic thing})
+        (and (stringp expected) (equalp (base-form actual) expected))
+        (matches? (scone-element actual) expected))))
 
 (defmethod matches? ((actual element) (expected (eql :type)))
   "Ensure that it is a type node we're matching against."
