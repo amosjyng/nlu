@@ -1,3 +1,5 @@
+(setf *constructions* nil)
+
 (defun ensure-indv-exists (element)
   "Either returns the INDV-NODE ELEMENT itself or an INDV-NODE of type ELEMENT."
   (declare (element element))
@@ -46,4 +48,5 @@
                 ((= ,str1 discard) (= ,object-se theme) (= ,str2 discard))))
        (v-payload (lookup-element ,action-se) theme)))
 
-(defaction screw-in-x screw-x-in {screw in} {tangible} "screw" "in")
+(defaction screw-in-x screw-x-in {screw in} {screw (fastener)} "screw" "in")
+(defaction pick-up-x pick-x-up {pick up} {tangible} "pick" "up")

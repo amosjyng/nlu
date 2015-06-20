@@ -723,7 +723,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;                          ;;;
-;;;     PAYLOAD EXEoCUTOR     ;;;
+;;;     PAYLOAD EXECUTOR     ;;;
 ;;;                          ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -820,7 +820,9 @@
   (when (> (node-length node) 1)
     (continue-node (make-node :stack (rest (node-stack node))
                               :level (node-level node))
-                   meanings-ht constructions)))
+                   meanings-ht
+                   :constructions constructions
+                   :meanings (list completion))))
 
 (defun node-current (node)
   "Get the current element at the top of a node's stack."
@@ -871,12 +873,14 @@
           (t (mapcar #'make-node-from new-matches)))))
 
 (defun continue-node (node meanings-ht
-                      &optional (constructions *constructions*))
+                      &key (constructions *constructions*) meanings)
   "Find all continuations for a search node."
   (declare (node node) (hash-table meanings-ht)
-           (list constructions))
+           (list constructions meanings))
   (let* ((match (first (node-stack node)))
-         (meanings (gethash (end-of match) meanings-ht))
+         (check (when (completed? match)
+                  (error "Match of node already completed!")))
+         (meanings (or meanings (gethash (end-of match) meanings-ht)))
          (ontop-nodes (start-nodes constructions meanings :on node))
          (continued-matches (remove nil (combine match meanings)))
          (completions (remove nil (mapcar #'complete continued-matches)))
@@ -890,6 +894,7 @@
          (new-match-nodes
           (mapcar (lambda (next-match) (replace-node-stack node next-match))
                   next-matches)))
+    (declare (ignore check))
     (append ontop-nodes new-start-nodes collapsed-nodes new-match-nodes)))
 
 (defun continue-nodes (nodes &rest rest)
