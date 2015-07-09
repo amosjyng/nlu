@@ -152,6 +152,10 @@
 (defvar *default-interpretation-confidence* 1
   "Default confidence value for new interpretations.")
 
+(defvar *syntactic-penalty* 0.1
+  "Penalty for interpreting something as a meaningless syntactic element rather
+   than as a concept.")
+
 (defvar *default-stats-count* 1
   "Default count for non-existent stats")
 
@@ -465,7 +469,8 @@
            (lookup-definitions (base-form n-gram)))
    (list (make-meaning n-gram
                        :element (lookup-element {syntactic thing})
-                       :confidence *default-interpretation-confidence*))))
+                       :confidence (- *default-interpretation-confidence*
+                                      *syntactic-penalty*)))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;
@@ -632,17 +637,6 @@
   "Is an object of the class MATCH?"
   (typep object 'match))
 
-(defun completed? (match)
-  "Check to see if a match is fully completed."
-  (equal (progress match) (length (pattern match))))
-
-(defun 1+progress (progress operator)
-  "Depending on what the operator is, decides whether or not to increment the
-   progress."
-  (case operator
-    (* progress)
-    (otherwise (1+ progress))))
-
 (defun is-optional? (operator)
   "Returns whether or not an operator is optional."
   (member operator '(? *)))
@@ -651,6 +645,18 @@
   "Get the next part of the pattern to be matched."
   (declare (match match))
   (nth (progress match) (pattern match)))
+
+(defun completed? (match)
+  "Check to see if a match is fully completed."
+  (and (equal (progress match) (length (pattern match)))
+       (not (is-optional? (operator (next-match-part match))))))
+
+(defun 1+progress (progress operator)
+  "Depending on what the operator is, decides whether or not to increment the
+   progress."
+  (case operator
+    (* progress)
+    (otherwise (1+ progress))))
 
 (defun match-helper (pattern progress actual)
   "Continue the current pattern being matched, and return an update to the
@@ -813,20 +819,27 @@
   "Get the length of a node's stack."
   (length (node-stack node)))
 
-(defun collapse-node (node completion meanings-ht constructions)
-  "Feed the completion into the previous pattern."
-  (declare (node node) (matched-construction completion))
-  (addhash (start-of completion) completion meanings-ht)
-  (when (> (node-length node) 1)
-    (continue-node (make-node :stack (rest (node-stack node))
-                              :level (node-level node))
-                   meanings-ht
-                   :constructions constructions
-                   :meanings (list completion))))
-
 (defun node-current (node)
   "Get the current element at the top of a node's stack."
   (first (node-stack node)))
+
+(defun collapse-node (node meanings-ht constructions)
+  "Feed the completion into the previous pattern."
+  (declare (node node))
+  (let* ((node-current (node-current node))
+         (completion (complete node-current))
+         (continuations
+          (when completion
+            (addhash (start-of completion) completion meanings-ht)
+            (if (> (node-length node) 1)
+                (continue-node (make-node :stack (rest (node-stack node))
+                                          :level (node-level node))
+                               meanings-ht
+                               :constructions constructions
+                               :meanings (list completion))
+                (start-nodes constructions (list completion)))))
+         (remains (if (completed? node-current) nil (list node))))
+    (append remains continuations)))
 
 (defun outer-product (fn list1 list2)
   "Take the outer product of two lists to produce a list of lists."
@@ -860,16 +873,15 @@
   (let* ((cm-list (outer-product #'make-match constructions meanings)))
     (remove nil (apply #'append cm-list))))
 
-(defun start-nodes (constructions meanings &key from on)
+(defun start-nodes (constructions meanings &key on)
   "Create search nodes for all possible matches."
   (declare (list constructions meanings))
   (let* ((new-matches (start-matches constructions meanings)))
-    (cond (from
-           (mapcar (lambda (new-match) (replace-node-stack from new-match))
-                   new-matches))
-          (on
+    (cond (on ; start a new match that will eventually produce a meaning that
+           ;; continues the current match
            (mapcar (lambda (new-match) (add-node-stack on new-match))
                    new-matches))
+          ;; if there's no matches at all, create a new one
           (t (mapcar #'make-node-from new-matches)))))
 
 (defun continue-node (node meanings-ht
@@ -878,24 +890,16 @@
   (declare (node node) (hash-table meanings-ht)
            (list constructions meanings))
   (let* ((match (first (node-stack node)))
-         (check (when (completed? match)
-                  (error "Match of node already completed!")))
          (meanings (or meanings (gethash (end-of match) meanings-ht)))
          (ontop-nodes (start-nodes constructions meanings :on node))
          (continued-matches (remove nil (combine match meanings)))
-         (completions (remove nil (mapcar #'complete continued-matches)))
-         (new-start-nodes (start-nodes constructions completions :from node))
-         (collapsed-nodes
-          (mapcar-append
-           (lambda (completion)
-             (collapse-node node completion meanings-ht constructions))
-           completions))
-         (next-matches (remove-if #'completed? continued-matches))
          (new-match-nodes
           (mapcar (lambda (next-match) (replace-node-stack node next-match))
-                  next-matches)))
-    (declare (ignore check))
-    (append ontop-nodes new-start-nodes collapsed-nodes new-match-nodes)))
+                  continued-matches)))
+    (mapcar-append (lambda (node)
+                     (declare (node node))
+                     (collapse-node node meanings-ht constructions))
+                   (append ontop-nodes new-match-nodes))))
 
 (defun continue-nodes (nodes &rest rest)
   "Find the best continuations for a set of search nodes."
@@ -907,32 +911,44 @@
   (declare (meaning meaning))
   (and (= (start-of meaning) start) (= (end-of meaning) until)))
 
-(defun parsing-algorithm (meanings-ht nodes until)
-  (when nodes
-    (or (loop for meaning in (gethash 0 meanings-ht)
-           when (goal-meaning? meaning :start 0 :until until)
-           return meaning)
-        (let ((result
-               (parsing-algorithm meanings-ht (continue-nodes nodes meanings-ht)
-                                  until)))
-          (when result
-            (update-stats result)
-            result)))))
+(defun find-goal (meanings-ht until)
+  "Find a parse of the whole sentence if it exists"
+  (declare (hash-table meanings-ht) (number until))
+  (loop for meaning in (sort-interpretations (gethash 0 meanings-ht))
+     when (goal-meaning? meaning :start 0 :until until)
+     return meaning))
 
-(defun understand (text &key (meanings-ht (make-hash-table :test 'equal)))
-  "Try to truly understand a piece of text."
+(defun parsing-algorithm (meanings-ht nodes until)
+  (let ((result
+         (or (find-goal meanings-ht until)
+             (when nodes
+               (parsing-algorithm meanings-ht (continue-nodes nodes meanings-ht)
+                                  until)))))
+    (when result
+      (update-stats result)
+      result)))
+
+(defun get-meanings-ht (text meanings-ht)
+  "Pre-populate a hash table with meanings"
   (declare (string text))
   (let* ((n-grams (pre-processor text))
          (morph-n-grams (mapcar-append #'morphological-engine n-grams))
          (meanings (mapcar-append #'meaning-creator morph-n-grams)))
     (loop for meaning in meanings
        do (addhash (start-of meaning) meaning meanings-ht))
-    (let ((result
-           (parsing-algorithm meanings-ht
-                              (start-nodes *constructions*
-                                           (gethash 0 meanings-ht))
-                              (end-of (first (last n-grams))))))
-      (or result
-          (format t "Only understood: ~A"
-                  (loop for meanings being the hash-values of meanings-ht
-                       collect meanings))))))
+    (list meanings-ht (end-of (first (last n-grams))))))
+
+(defun understand (text &key (meanings-ht (make-hash-table :test 'equal)))
+  "Try to truly understand a piece of text."
+  (declare (string text))
+  (let* ((meanings-ht-end (get-meanings-ht text meanings-ht))
+         (meanings-ht (first meanings-ht-end))
+         (end (second meanings-ht-end))
+         (result
+          (parsing-algorithm meanings-ht (start-nodes *constructions*
+                                                      (gethash 0 meanings-ht))
+                             end)))
+    (or result
+        (format t "Only understood: ~A"
+                (loop for meanings being the hash-values of meanings-ht
+                   collect meanings)))))
