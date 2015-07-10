@@ -1,3 +1,5 @@
+(setf *constructions* nil)
+
 (defun ensure-indv-exists (element)
   "Either returns the INDV-NODE ELEMENT itself or an INDV-NODE of type ELEMENT."
   (declare (element element))
@@ -39,11 +41,15 @@
 
 (defmacro defaction (name1 name2 action-se object-se str1 str2)
   "Create two constructions for phrasal verbs."
-  `(defconstructions
-       ((,name1 ,action-se
-                ((= ,str1 discard) (= ,str2 discard) (= ,object-se theme)))
-        (,name2 ,action-se
-                ((= ,str1 discard) (= ,object-se theme) (= ,str2 discard))))
-       (v-payload (lookup-element ,action-se) theme)))
+  `(progn
+     (defconstruction ,name2 ,action-se
+       ((= ,str1 discard) (= ,object-se theme) (= ,str2 discard))
 
-(defaction screw-in-x screw-x-in {screw in} {tangible} "screw" "in")
+       (v-payload (lookup-element ,action-se) theme))
+     (defconstruction ,name1 ,action-se
+       ((= ,str1 discard) (= ,str2 discard))
+
+       (lookup-element ,action-se))))
+
+(defaction screw-in-x screw-x-in {screw in} {screw (fastener)} "screw" "in")
+(defaction pick-up-x pick-x-up {pick up} {tangible} "pick" "up")
