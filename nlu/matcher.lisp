@@ -945,8 +945,13 @@
          (meanings-ht (first meanings-ht-end))
          (end (second meanings-ht-end))
          (result
-          (parsing-algorithm meanings-ht (start-nodes *constructions*
-                                                      (gethash 0 meanings-ht))
+          (parsing-algorithm meanings-ht
+                             (mapcar-append
+                              (lambda (new-node)
+                                (collapse-node new-node meanings-ht
+                                               *constructions*))
+                              (start-nodes *constructions*
+                                           (gethash 0 meanings-ht)))
                              end)))
     (or result
         (format t "Only understood: ~A"
